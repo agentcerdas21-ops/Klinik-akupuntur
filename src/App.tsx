@@ -39,6 +39,10 @@ const ClinicApp: React.FC = () => {
   const [isTherapyModalOpen, setIsTherapyModalOpen] = useState(false);
   const [therapyToEdit, setTherapyToEdit] = useState<TherapySession | null>(null);
 
+  // Finance tab & modal trigger
+  const [financeInitialTab, setFinanceInitialTab] = useState<'expenses' | 'income'>('expenses');
+  const [financeAutoOpenModal, setFinanceAutoOpenModal] = useState<'expense' | 'income' | null>(null);
+
   // Keyboard shortcut Ctrl+K / Cmd+K for global search
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -201,7 +205,13 @@ const ClinicApp: React.FC = () => {
               />
             )}
 
-            {activeTab === 'finance' && <FinanceView />}
+            {activeTab === 'finance' && (
+              <FinanceView
+                initialTab={financeInitialTab}
+                autoOpenModal={financeAutoOpenModal}
+                onClearAutoOpenModal={() => setFinanceAutoOpenModal(null)}
+              />
+            )}
 
             {activeTab === 'reports' && <ReportsView />}
 
@@ -238,8 +248,19 @@ const ClinicApp: React.FC = () => {
         onClose={() => setIsQuickActionOpen(false)}
         onOpenPatientModal={handleOpenAddPatient}
         onOpenTherapyModal={() => handleOpenAddTherapy()}
+        onOpenInvoices={() => handleNavigate('invoices')}
         onOpenSaleModal={() => handleNavigate('sales')}
-        onOpenExpenseModal={() => handleNavigate('finance')}
+        onOpenHerbalModal={() => handleNavigate('herbal')}
+        onOpenIncomeModal={() => {
+          setFinanceInitialTab('income');
+          setFinanceAutoOpenModal('income');
+          handleNavigate('finance');
+        }}
+        onOpenExpenseModal={() => {
+          setFinanceInitialTab('expenses');
+          setFinanceAutoOpenModal('expense');
+          handleNavigate('finance');
+        }}
       />
 
       {/* Patient Add / Edit Modal */}

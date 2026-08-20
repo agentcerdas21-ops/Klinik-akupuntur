@@ -16,10 +16,14 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 
 interface FinanceViewProps {
   initialTab?: 'expenses' | 'income';
+  autoOpenModal?: 'expense' | 'income' | null;
+  onClearAutoOpenModal?: () => void;
 }
 
 export const FinanceView: React.FC<FinanceViewProps> = ({
-  initialTab = 'expenses'
+  initialTab = 'expenses',
+  autoOpenModal,
+  onClearAutoOpenModal
 }) => {
   const {
     expenses,
@@ -35,6 +39,22 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   const { isOwner } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'expenses' | 'income'>(initialTab);
+
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  React.useEffect(() => {
+    if (autoOpenModal === 'expense') {
+      setActiveTab('expenses');
+      setShowExpenseModal(true);
+      if (onClearAutoOpenModal) onClearAutoOpenModal();
+    } else if (autoOpenModal === 'income') {
+      setActiveTab('income');
+      setShowIncomeModal(true);
+      if (onClearAutoOpenModal) onClearAutoOpenModal();
+    }
+  }, [autoOpenModal, onClearAutoOpenModal]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 

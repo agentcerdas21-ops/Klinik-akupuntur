@@ -400,6 +400,164 @@ export function generateTherapyResumePDF(
   doc.save(`Riwayat_Terapi_${patient.patient_code}_${patient.full_name.replace(/\s+/g, '_')}.pdf`);
 }
 
+export function generateFinancialReportPDF(
+  periodTitle: string,
+  summary: {
+    totalRevenue: number;
+    totalSales: number;
+    totalExpense: number;
+    netIncome: number;
+    totalTransactions: number;
+    totalPatients: number;
+    totalPayments: number;
+  },
+  revenueSources: Array<{ name: string; value: number }>,
+  expenseCategories: Array<{ category: string; amount: number; count: number }>,
+  transactions: Array<{
+    date: string;
+    type: string;
+    category: string;
+    description: string;
+    reference: string;
+    amount: number;
+    status: string;
+  }>,
+  settings: ClinicSettings
+) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const primaryNavy = [15, 38, 52];
+  const accentEmerald = [16, 185, 129];
+  const textDark = [30, 41, 59];
+  const textMuted = [100, 116, 139];
+
+  // Header Banner
+  doc.setFillColor(primaryNavy[0], primaryNavy[1], primaryNavy[2]);
+  doc.rect(0, 0, 210, 36, 'F');
+
+  // Clinic Brand
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(settings.clinic_name || 'ACUCARE', 16, 14);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 220, 230);
+  doc.text(settings.clinic_tagline || 'Klinik Akupunktur Ahli Saraf Kejepit & Stroke', 16, 20);
+  doc.text(`Praktisi: ${settings.owner_name} | Telp/WA: ${settings.whatsapp}`, 16, 26);
+
+  // Title Right
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(16, 185, 129);
+  doc.text('LAPORAN KEUANGAN', 194, 16, { align: 'right' });
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text(`Periode: ${periodTitle}`, 194, 23, { align: 'right' });
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Dicetak: ${formatDateIndo(new Date().toISOString())}`, 194, 29, { align: 'right' });
+
+  // Summary Metrics Table
+  const summaryRows = [
+    ['Total Pemasukan (Revenue)', formatIDR(summary.totalRevenue), 'Total Pengeluaran (Beban)', formatIDR(summary.totalExpense)],
+    ['Total Penjualan Kasir', formatIDR(summary.totalSales), 'Laba Bersih (Net Income)', formatIDR(summary.netIncome)],
+    ['Jumlah Transaksi', `${summary.totalTransactions} transaksi`, 'Jumlah Pasien Terlayani', `${summary.totalPatients} pasien`]
+  ];
+
+  autoTable(doc, {
+    startY: 42,
+    head: [['Metrik Pemasukan', 'Nominal', 'Metrik Beban & Hasil', 'Nominal']],
+    body: summaryRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 38, 52],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8.5
+    },
+    styles: {
+      fontSize: 8,
+      cellPadding: 3
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+      2: { fontStyle: 'bold', cellWidth: 50 },
+      3: { halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // Transactions Table
+  const txRows = transactions.slice(0, 45).map((t, idx) => [
+    idx + 1,
+    formatDateIndo(t.date),
+    t.type,
+    t.category,
+    t.description,
+    t.reference,
+    formatIDR(t.amount),
+    t.status
+  ]);
+
+  if (txRows.length === 0) {
+    txRows.push([1, '-', 'Info', '-', 'Tidak ada transaksi pada periode ini', '-', 'Rp 0', '-']);
+  }
+
+  autoTable(doc, {
+    startY: currentY,
+    head: [['No', 'Tanggal', 'Jenis', 'Kategori', 'Deskripsi', 'Referensi', 'Nominal', 'Status']],
+    body: txRows,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8
+    },
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2.5
+    },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 24 },
+      2: { cellWidth: 20 },
+      3: { cellWidth: 26 },
+      4: { cellWidth: 'auto' },
+      5: { cellWidth: 26 },
+      6: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
+      7: { cellWidth: 18, halign: 'center' }
+    }
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY + 8;
+
+  // Signature section if space allows, otherwise new page
+  if (finalY < 250) {
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.setFontSize(8.5);
+    doc.text(`Bekasi, ${formatDateIndo(new Date().toISOString())}`, 145, finalY + 4);
+    doc.text('Penanggung Jawab Keuangan & Praktek,', 145, finalY + 9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(settings.owner_name, 145, finalY + 24);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+    doc.text('Praktisi Utama ACUCARE', 145, finalY + 29);
+  }
+
+  const cleanPeriod = periodTitle.replace(/[^a-zA-Z0-9_-]/g, '_');
+  doc.save(`Laporan_Keuangan_ACUCARE_${cleanPeriod}.pdf`);
+}
+
 // ==========================================
 // WHATSAPP URL GENERATOR
 // ==========================================
