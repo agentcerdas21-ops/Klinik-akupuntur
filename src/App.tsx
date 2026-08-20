@@ -7,6 +7,7 @@ import { MobileNav } from './components/common/MobileNav';
 import { FloatingWhatsApp } from './components/common/FloatingWhatsApp';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
 import { QuickActionModal } from './components/dashboard/QuickActionModal';
+import { Patient, TherapySession } from './types';
 
 // Views
 import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard';
@@ -29,11 +30,13 @@ const ClinicApp: React.FC = () => {
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
-  // Modals
+  // Modals & Edit Targets
   const [isQuickActionOpen, setIsQuickActionOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [patientToEdit, setPatientToEdit] = useState<Patient | null>(null);
   const [isTherapyModalOpen, setIsTherapyModalOpen] = useState(false);
+  const [therapyToEdit, setTherapyToEdit] = useState<TherapySession | null>(null);
 
   // Keyboard shortcut Ctrl+K / Cmd+K for global search
   React.useEffect(() => {
@@ -68,13 +71,33 @@ const ClinicApp: React.FC = () => {
     setActiveTab('invoices');
   };
 
-  const handleStartTherapyForPatient = (patientId: string) => {
-    setSelectedPatientId(patientId);
+  const handleOpenAddPatient = () => {
+    setPatientToEdit(null);
+    setIsPatientModalOpen(true);
+  };
+
+  const handleOpenEditPatient = (patient: Patient) => {
+    setPatientToEdit(patient);
+    setIsPatientModalOpen(true);
+  };
+
+  const handleOpenAddTherapy = (patientId?: string) => {
+    if (patientId) {
+      setSelectedPatientId(patientId);
+    }
+    setTherapyToEdit(null);
     setIsTherapyModalOpen(true);
   };
 
-  const handleStartSaleForPatient = (patientId: string) => {
-    setSelectedPatientId(patientId);
+  const handleOpenEditTherapy = (session: TherapySession) => {
+    setTherapyToEdit(session);
+    setIsTherapyModalOpen(true);
+  };
+
+  const handleOpenNewSale = (patientId?: string) => {
+    if (patientId) {
+      setSelectedPatientId(patientId);
+    }
     setActiveTab('sales');
   };
 
@@ -100,8 +123,8 @@ const ClinicApp: React.FC = () => {
               <ExecutiveDashboard
                 onNavigate={handleNavigate}
                 onSelectPatient={handleSelectPatient}
-                onOpenPatientModal={() => setIsPatientModalOpen(true)}
-                onOpenTherapyModal={() => setIsTherapyModalOpen(true)}
+                onOpenPatientModal={handleOpenAddPatient}
+                onOpenTherapyModal={() => handleOpenAddTherapy()}
                 onOpenSaleModal={() => handleNavigate('sales')}
                 onOpenExpenseModal={() => handleNavigate('finance')}
               />
@@ -113,15 +136,17 @@ const ClinicApp: React.FC = () => {
                   <PatientDetailView
                     patientId={selectedPatientId}
                     onBack={() => setSelectedPatientId(null)}
-                    onStartTherapy={() => setIsTherapyModalOpen(true)}
-                    onStartSale={() => {
-                      setActiveTab('sales');
-                    }}
+                    onEditPatient={handleOpenEditPatient}
+                    onOpenAddTherapy={handleOpenAddTherapy}
+                    onEditTherapy={handleOpenEditTherapy}
+                    onOpenNewSale={handleOpenNewSale}
+                    onSelectInvoice={handleSelectInvoice}
                   />
                 ) : (
                   <PatientList
                     onSelectPatient={handleSelectPatient}
-                    onOpenAddModal={() => setIsPatientModalOpen(true)}
+                    onOpenAddModal={handleOpenAddPatient}
+                    onOpenEditModal={handleOpenEditPatient}
                   />
                 )}
               </>
@@ -129,7 +154,8 @@ const ClinicApp: React.FC = () => {
 
             {activeTab === 'therapy' && (
               <TherapySessionList
-                onOpenAddModal={() => setIsTherapyModalOpen(true)}
+                onOpenAddModal={handleOpenAddTherapy}
+                onOpenEditModal={handleOpenEditTherapy}
                 onSelectPatient={handleSelectPatient}
               />
             )}
@@ -190,27 +216,35 @@ const ClinicApp: React.FC = () => {
       <QuickActionModal
         isOpen={isQuickActionOpen}
         onClose={() => setIsQuickActionOpen(false)}
-        onOpenPatientModal={() => setIsPatientModalOpen(true)}
-        onOpenTherapyModal={() => setIsTherapyModalOpen(true)}
+        onOpenPatientModal={handleOpenAddPatient}
+        onOpenTherapyModal={() => handleOpenAddTherapy()}
         onOpenSaleModal={() => handleNavigate('sales')}
         onOpenExpenseModal={() => handleNavigate('finance')}
       />
 
-      {/* Patient Add Modal */}
+      {/* Patient Add / Edit Modal */}
       <PatientFormModal
         isOpen={isPatientModalOpen}
-        onClose={() => setIsPatientModalOpen(false)}
+        patientToEdit={patientToEdit}
+        onClose={() => {
+          setIsPatientModalOpen(false);
+          setPatientToEdit(null);
+        }}
         onSuccess={(patient) => {
           setSelectedPatientId(patient.id);
           setActiveTab('patients');
         }}
       />
 
-      {/* Therapy Add Modal */}
+      {/* Therapy Add / Edit Modal */}
       <TherapyFormModal
         isOpen={isTherapyModalOpen}
-        onClose={() => setIsTherapyModalOpen(false)}
+        sessionToEdit={therapyToEdit}
         initialPatientId={selectedPatientId || undefined}
+        onClose={() => {
+          setIsTherapyModalOpen(false);
+          setTherapyToEdit(null);
+        }}
         onSuccess={() => {
           setActiveTab('therapy');
         }}
