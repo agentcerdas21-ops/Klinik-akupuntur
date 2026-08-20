@@ -30,7 +30,9 @@ export interface NavItem {
 
 interface SidebarProps {
   activeTab: string;
-  onSelectTab: (tabId: string) => void;
+  onSelectTab?: (tabId: string) => void;
+  setActiveTab?: (tabId: string) => void;
+  onNavigate?: (tabId: string) => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -38,11 +40,15 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   onSelectTab,
+  setActiveTab,
+  onNavigate,
   isMobileOpen = false,
   onCloseMobile
 }) => {
   const { isOwner, role } = useAuth();
   const { patients, unpaidInvoices, lowStockProducts } = useClinic();
+
+  const handleSelect = onSelectTab || setActiveTab || onNavigate || (() => {});
 
   const navItems: NavItem[] = [
     {
@@ -123,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const filteredNav = navItems.filter((item) => !item.ownerOnly || isOwner);
 
   const handleNavClick = (tabId: string) => {
-    onSelectTab(tabId);
+    handleSelect(tabId);
     if (onCloseMobile) onCloseMobile();
   };
 

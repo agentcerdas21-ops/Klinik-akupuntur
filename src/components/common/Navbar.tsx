@@ -16,23 +16,35 @@ import { useClinic } from '../../context/DbContext';
 import { formatIDR } from '../../lib/exportUtils';
 
 interface NavbarProps {
-  onOpenSearch: () => void;
-  onToggleMobileSidebar: () => void;
-  onNavigateTab: (tab: string) => void;
-  onSelectPatient: (patientId: string) => void;
-  onSelectInvoice: (invoiceId: string) => void;
+  onOpenSearch?: () => void;
+  onOpenGlobalSearch?: () => void;
+  onOpenQuickAction?: () => void;
+  onToggleMobileSidebar?: () => void;
+  onNavigateTab?: (tab: string) => void;
+  onSelectPatient?: (patientId: string) => void;
+  onSelectInvoice?: (invoiceId: string) => void;
+  activeTab?: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   onOpenSearch,
+  onOpenGlobalSearch,
+  onOpenQuickAction,
   onToggleMobileSidebar,
   onNavigateTab,
-  onSelectInvoice
+  onSelectPatient,
+  onSelectInvoice,
+  activeTab
 }) => {
   const { user, role, switchRole, logout, isOwner } = useAuth();
   const { settings, lowStockProducts, unpaidInvoices } = useClinic();
   const [showAlerts, setShowAlerts] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  const handleOpenSearch = onOpenSearch || onOpenGlobalSearch || (() => {});
+  const handleToggleSidebar = onToggleMobileSidebar || (() => {});
+  const handleNavigate = onNavigateTab || (() => {});
+  const handleInvoiceSelect = onSelectInvoice || (() => {});
 
   const totalAlerts = lowStockProducts.length + unpaidInvoices.length;
 
@@ -41,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Left: Mobile Toggle & Clinic Title / Subtitle */}
       <div className="flex items-center gap-3">
         <button
-          onClick={onToggleMobileSidebar}
+          onClick={handleToggleSidebar}
           className="p-2 -ml-2 text-slate-600 hover:text-slate-900 md:hidden rounded-lg hover:bg-slate-100 cursor-pointer"
         >
           <Menu className="w-6 h-6" />
@@ -65,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Center: Global Search Bar Trigger */}
       <div className="flex-1 max-w-md mx-4 hidden lg:block">
         <button
-          onClick={onOpenSearch}
+          onClick={handleOpenSearch}
           className="w-full flex items-center justify-between px-3.5 py-2 bg-slate-100/80 hover:bg-slate-100 text-slate-500 rounded-xl border border-slate-200 text-xs md:text-sm font-medium transition-colors group cursor-pointer"
         >
           <div className="flex items-center gap-2.5">
@@ -82,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="flex items-center gap-2 md:gap-3">
         {/* Mobile Search Button */}
         <button
-          onClick={onOpenSearch}
+          onClick={handleOpenSearch}
           className="p-2 text-slate-600 hover:text-slate-900 lg:hidden rounded-lg hover:bg-slate-100 cursor-pointer"
           title="Cari"
         >
@@ -124,7 +136,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <div
                         key={p.id}
                         onClick={() => {
-                          onNavigateTab('herbal');
+                          handleNavigate('herbal');
                           setShowAlerts(false);
                         }}
                         className="p-3 hover:bg-amber-50/60 cursor-pointer transition-colors flex items-start gap-3"
@@ -145,7 +157,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <div
                         key={inv.id}
                         onClick={() => {
-                          onSelectInvoice(inv.id);
+                          handleInvoiceSelect(inv.id);
                           setShowAlerts(false);
                         }}
                         className="p-3 hover:bg-rose-50/60 cursor-pointer transition-colors flex items-start gap-3"
@@ -215,7 +227,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="py-1">
                 <button
                   onClick={() => {
-                    onNavigateTab('profile');
+                    handleNavigate('profile');
                     setShowProfileMenu(false);
                   }}
                   className="w-full px-3.5 py-2 text-xs text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
@@ -225,7 +237,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
                 <button
                   onClick={() => {
-                    onNavigateTab('settings');
+                    handleNavigate('settings');
                     setShowProfileMenu(false);
                   }}
                   className="w-full px-3.5 py-2 text-xs text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"

@@ -10,22 +10,28 @@ import {
 
 interface MobileNavProps {
   activeTab: string;
-  onSelectTab: (tab: string) => void;
-  onOpenQuickAction: () => void;
-  onToggleMoreMenu: () => void;
+  onSelectTab?: (tab: string) => void;
+  setActiveTab?: (tab: string) => void;
+  onNavigate?: (tab: string) => void;
+  onOpenQuickAction?: () => void;
+  onToggleMoreMenu?: () => void;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
   activeTab,
   onSelectTab,
+  setActiveTab,
+  onNavigate,
   onOpenQuickAction,
   onToggleMoreMenu
 }) => {
+  const handleSelect = onSelectTab || setActiveTab || onNavigate || (() => {});
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 bg-[#0a1b24] border-t border-slate-800 md:hidden px-2 py-1.5 flex items-center justify-around shadow-2xl">
       {/* Dashboard */}
       <button
-        onClick={() => onSelectTab('dashboard')}
+        onClick={() => handleSelect('dashboard')}
         className={`flex flex-col items-center justify-center p-1.5 rounded-xl text-[10px] font-medium transition-colors ${
           activeTab === 'dashboard' ? 'text-emerald-400 font-bold' : 'text-slate-400'
         }`}
@@ -36,7 +42,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
       {/* Pasien */}
       <button
-        onClick={() => onSelectTab('patients')}
+        onClick={() => handleSelect('patients')}
         className={`flex flex-col items-center justify-center p-1.5 rounded-xl text-[10px] font-medium transition-colors ${
           activeTab === 'patients' ? 'text-emerald-400 font-bold' : 'text-slate-400'
         }`}
@@ -48,7 +54,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       {/* Center Floating Action Button (+) */}
       <div className="relative -top-4">
         <button
-          onClick={onOpenQuickAction}
+          onClick={onOpenQuickAction || (() => {})}
           id="mobile-quick-action-btn"
           className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-950/60 border-2 border-[#0a1b24] active:scale-95 transition-transform"
         >
@@ -58,7 +64,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
       {/* Terapi */}
       <button
-        onClick={() => onSelectTab('therapy')}
+        onClick={() => handleSelect('therapy')}
         className={`flex flex-col items-center justify-center p-1.5 rounded-xl text-[10px] font-medium transition-colors ${
           activeTab === 'therapy' ? 'text-emerald-400 font-bold' : 'text-slate-400'
         }`}
@@ -69,7 +75,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
 
       {/* More / Menu Drawer */}
       <button
-        onClick={onToggleMoreMenu}
+        onClick={onToggleMoreMenu || (() => {})}
         className={`flex flex-col items-center justify-center p-1.5 rounded-xl text-[10px] font-medium transition-colors ${
           activeTab !== 'dashboard' && activeTab !== 'patients' && activeTab !== 'therapy'
             ? 'text-emerald-400 font-bold'

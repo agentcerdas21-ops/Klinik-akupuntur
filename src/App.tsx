@@ -31,6 +31,7 @@ const ClinicApp: React.FC = () => {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   // Modals & Edit Targets
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isQuickActionOpen, setIsQuickActionOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
@@ -103,15 +104,26 @@ const ClinicApp: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100/75 text-slate-800 antialiased font-sans">
-      {/* Desktop Sidebar Navigation */}
-      <Sidebar activeTab={activeTab} setActiveTab={handleNavigate} />
+      {/* Desktop Sidebar Navigation & Mobile Drawer */}
+      <Sidebar
+        activeTab={activeTab}
+        onSelectTab={handleNavigate}
+        setActiveTab={handleNavigate}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+      />
 
       {/* Main App Container */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Top Header Navbar */}
         <Navbar
-          onOpenQuickAction={() => setIsQuickActionOpen(true)}
           onOpenGlobalSearch={() => setIsGlobalSearchOpen(true)}
+          onOpenSearch={() => setIsGlobalSearchOpen(true)}
+          onOpenQuickAction={() => setIsQuickActionOpen(true)}
+          onToggleMobileSidebar={() => setIsMobileSidebarOpen(true)}
+          onNavigateTab={handleNavigate}
+          onSelectPatient={handleSelectPatient}
+          onSelectInvoice={handleSelectInvoice}
           activeTab={activeTab}
         />
 
@@ -193,13 +205,21 @@ const ClinicApp: React.FC = () => {
 
             {activeTab === 'reports' && <ReportsView />}
 
-            {activeTab === 'settings' && <SettingsView />}
+            {(activeTab === 'settings' || activeTab === 'profile' || activeTab === 'backup') && (
+              <SettingsView />
+            )}
           </div>
         </main>
       </div>
 
       {/* Mobile Bottom Navigation Bar */}
-      <MobileNav activeTab={activeTab} setActiveTab={handleNavigate} />
+      <MobileNav
+        activeTab={activeTab}
+        onSelectTab={handleNavigate}
+        setActiveTab={handleNavigate}
+        onOpenQuickAction={() => setIsQuickActionOpen(true)}
+        onToggleMoreMenu={() => setIsMobileSidebarOpen(true)}
+      />
 
       {/* Floating WhatsApp Action Button */}
       <FloatingWhatsApp />
