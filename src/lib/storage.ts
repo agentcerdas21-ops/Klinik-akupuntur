@@ -681,9 +681,47 @@ const DEFAULT_STOCK_ADJUSTMENTS: StockAdjustment[] = [
 
 class StorageEngine {
   private listeners: Set<() => void> = new Set();
+  private channel: BroadcastChannel | null = null;
 
   constructor() {
     this.initDefaultsIfEmpty();
+    this.initCrossTabSync();
+  }
+
+  private initCrossTabSync() {
+    if (typeof window !== 'undefined') {
+      // 1. Modern BroadcastChannel API for instantaneous multi-tab sync
+      try {
+        if ('BroadcastChannel' in window) {
+          this.channel = new BroadcastChannel('acucare_db_sync_channel');
+          this.channel.onmessage = (event) => {
+            if (event.data?.type === 'ACUCARE_STORAGE_CHANGE') {
+              this.notifyLocal();
+            }
+          };
+        }
+      } catch (e) {
+        console.warn('BroadcastChannel initialization error:', e);
+      }
+
+      // 2. Standard Window Storage Event listener (triggers across different tabs/windows)
+      window.addEventListener('storage', (event) => {
+        if (!event.key || event.key.startsWith(STORAGE_PREFIX) || event.key.startsWith('acucare_')) {
+          this.notifyLocal();
+        }
+      });
+
+      // 3. Tab Visibility & Window Focus event (guarantees freshest state when returning to tab)
+      window.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.notifyLocal();
+        }
+      });
+
+      window.addEventListener('focus', () => {
+        this.notifyLocal();
+      });
+    }
   }
 
   public subscribe(callback: () => void): () => void {
@@ -691,7 +729,7 @@ class StorageEngine {
     return () => this.listeners.delete(callback);
   }
 
-  private notify() {
+  private notifyLocal() {
     this.listeners.forEach((listener) => {
       try {
         listener();
@@ -699,6 +737,25 @@ class StorageEngine {
         console.error('Storage listener error:', err);
       }
     });
+  }
+
+  private notify(broadcast: boolean = true) {
+    this.notifyLocal();
+
+    if (broadcast && this.channel) {
+      try {
+        this.channel.postMessage({
+          type: 'ACUCARE_STORAGE_CHANGE',
+          timestamp: Date.now()
+        });
+      } catch (err) {
+        console.error('BroadcastChannel postMessage error:', err);
+      }
+    }
+  }
+
+  public triggerSync() {
+    this.notify(true);
   }
 
   private get<T>(key: string, defaultValue: T): T {
@@ -715,7 +772,7 @@ class StorageEngine {
   private set<T>(key: string, value: T): void {
     try {
       localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
-      this.notify();
+      this.notify(true);
     } catch (e) {
       console.error(`Error saving ${key} to storage:`, e);
     }

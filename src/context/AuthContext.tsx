@@ -14,8 +14,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    // Check if explicitly logged out
+  const getInitialUser = (): User | null => {
     const isLoggedOut = localStorage.getItem('acucare_is_logged_out');
     if (isLoggedOut === 'true') {
       return null;
@@ -38,7 +37,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       role: 'OWNER',
       created_at: '2026-01-01T08:00:00.000Z'
     };
-  });
+  };
+
+  const [user, setUser] = useState<User | null>(getInitialUser);
+
+  // Sync auth state across browser tabs in real-time
+  useEffect(() => {
+    const syncAuthFromStorage = () => {
+      const isLoggedOut = localStorage.getItem('acucare_is_logged_out');
+      if (isLoggedOut === 'true') {
+        setUser(null);
+        return;
+      }
+
+      const saved = localStorage.getItem('acucare_active_user');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.email) {
+            setUser((prev) => {
+              if (prev?.id === parsed.id && prev?.role === parsed.role && prev?.name === parsed.name) {
+                return prev;
+              }
+              return parsed;
+            });
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === 'acucare_active_user' || e.key === 'acucare_is_logged_out') {
+        syncAuthFromStorage();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        syncAuthFromStorage();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
