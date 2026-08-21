@@ -309,6 +309,9 @@ const DEFAULT_THERAPY_SESSIONS: TherapySession[] = [
     next_plan: 'Lanjutkan sesi 2 dalam 4 hari, disarankan jangan mengangkat barang berat.',
     cost: 250000,
     payment_status: 'Lunas',
+    payment_method: 'Transfer',
+    sale_id: 'sle_1',
+    invoice_id: 'inv_1',
     created_at: '2026-08-01T10:00:00.000Z',
     updated_at: '2026-08-01T10:00:00.000Z'
   },
@@ -327,6 +330,9 @@ const DEFAULT_THERAPY_SESSIONS: TherapySession[] = [
     next_plan: 'Evaluasi sesi 3 minggu depan dan tambah herbal Shen Jin Huo Luo Dan.',
     cost: 250000,
     payment_status: 'Lunas',
+    payment_method: 'Transfer',
+    sale_id: 'sle_4',
+    invoice_id: 'inv_4',
     created_at: '2026-08-05T10:30:00.000Z',
     updated_at: '2026-08-05T10:30:00.000Z'
   },
@@ -345,6 +351,9 @@ const DEFAULT_THERAPY_SESSIONS: TherapySession[] = [
     next_plan: 'Sesi rutin 2x seminggu untuk penguatan neuromuscular pathway.',
     cost: 300000,
     payment_status: 'Lunas',
+    payment_method: 'QRIS',
+    sale_id: 'sle_2',
+    invoice_id: 'inv_2',
     created_at: '2026-08-03T11:45:00.000Z',
     updated_at: '2026-08-03T11:45:00.000Z'
   },
@@ -363,6 +372,9 @@ const DEFAULT_THERAPY_SESSIONS: TherapySession[] = [
     next_plan: 'Sesi lanjutan jika keluhan kambuh karena kebiasaan lembur.',
     cost: 200000,
     payment_status: 'Lunas',
+    payment_method: 'Cash',
+    sale_id: 'sle_3',
+    invoice_id: 'inv_3',
     created_at: '2026-08-08T15:00:00.000Z',
     updated_at: '2026-08-08T15:00:00.000Z'
   }
@@ -685,6 +697,7 @@ class StorageEngine {
 
   constructor() {
     this.initDefaultsIfEmpty();
+    this.syncOrphanTherapySessions();
     this.initCrossTabSync();
   }
 
@@ -937,41 +950,325 @@ class StorageEngine {
     return max + 1;
   }
 
+  public syncOrphanTherapySessions(): void {
+    const sessions = this.get<TherapySession[]>('therapy_sessions', []);
+    const sales = this.get<Sale[]>('sales', []);
+    const saleItems = this.get<SaleItem[]>('sale_items', []);
+    const invoices = this.get<Invoice[]>('invoices', []);
+    const payments = this.get<Payment[]>('payments', []);
+    const patients = this.get<Patient[]>('patients', []);
+    let modified = false;
+
+    sessions.forEach((ses) => {
+      if (ses.cost > 0) {
+        const existingSaleIndex = sales.findIndex((s) => s.id === ses.sale_id);
+        const existingInvoiceIndex = invoices.findIndex((i) => i.id === ses.invoice_id);
+
+        if (existingSaleIndex < 0 || existingInvoiceIndex < 0) {
+          const matchingSale = sales.find(
+            (s) => s.patient_id === ses.patient_id && s.sale_date === ses.therapy_date
+          );
+
+          if (matchingSale) {
+            ses.sale_id = matchingSale.id;
+            ses.invoice_id = matchingSale.invoice_id;
+            modified = true;
+          } else {
+            const patient = patients.find((p) => p.id === ses.patient_id);
+            const patientName = patient?.full_name || 'Pasien Klinik';
+            const saleId = 'sle_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const invoiceId = 'inv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+            const dateStr = ses.therapy_date ? ses.therapy_date.replace(/-/g, '').substring(0, 6) : '202608';
+            const invoiceNumber = `INV-${dateStr}-${(invoices.length + 1).toString().padStart(4, '0')}`;
+            const paymentMethod = ses.payment_method || 'Cash';
+            const now = new Date().toISOString();
+
+            const newSaleItem: SaleItem = {
+              id: 'sit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+              sale_id: saleId,
+              item_type: 'service',
+              item_name: `Sesi #${ses.session_number}: ${ses.therapy_type}`,
+              quantity: 1,
+              price: ses.cost,
+              subtotal: ses.cost
+            };
+
+            const newSale: Sale = {
+              id: saleId,
+              invoice_id: invoiceId,
+              patient_id: ses.patient_id,
+              patient_name: patientName,
+              sale_date: ses.therapy_date,
+              subtotal: ses.cost,
+              discount: 0,
+              total: ses.cost,
+              payment_status: ses.payment_status,
+              payment_method: paymentMethod,
+              notes: `Sesi Terapi #${ses.session_number} (${ses.therapy_type})`,
+              items: [newSaleItem],
+              created_at: now
+            };
+
+            const newInvoice: Invoice = {
+              id: invoiceId,
+              invoice_number: invoiceNumber,
+              patient_id: ses.patient_id,
+              patient_name: patientName,
+              sale_id: saleId,
+              invoice_date: ses.therapy_date,
+              subtotal: ses.cost,
+              discount: 0,
+              total: ses.cost,
+              payment_status: ses.payment_status,
+              payment_method: paymentMethod,
+              notes: `Sesi Terapi #${ses.session_number} (${ses.therapy_type})`,
+              created_at: now
+            };
+
+            sales.unshift(newSale);
+            saleItems.push(newSaleItem);
+            invoices.unshift(newInvoice);
+
+            if (ses.payment_status === 'Lunas') {
+              const newPayment: Payment = {
+                id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                patient_id: ses.patient_id,
+                sale_id: saleId,
+                invoice_id: invoiceId,
+                payment_date: ses.therapy_date,
+                amount: ses.cost,
+                payment_method: paymentMethod,
+                status: 'Lunas',
+                notes: `Pembayaran Sesi Terapi #${ses.session_number}`,
+                created_at: now
+              };
+              payments.unshift(newPayment);
+            }
+
+            ses.sale_id = saleId;
+            ses.invoice_id = invoiceId;
+            modified = true;
+          }
+        }
+      }
+    });
+
+    if (modified) {
+      this.set('therapy_sessions', sessions);
+      this.set('sales', sales);
+      this.set('sale_items', saleItems);
+      this.set('invoices', invoices);
+      this.set('payments', payments);
+    }
+  }
+
   public saveTherapySession(session: Omit<TherapySession, 'id' | 'created_at' | 'updated_at'> & { id?: string }): TherapySession {
     const sessions = this.getTherapySessions();
     const now = new Date().toISOString();
+    const patient = this.getPatientById(session.patient_id);
+    const patientName = patient?.full_name || 'Pasien Klinik';
+    const paymentMethod = session.payment_method || 'Cash';
+
+    let savedSession: TherapySession;
 
     if (session.id) {
       const index = sessions.findIndex((s) => s.id === session.id);
       if (index >= 0) {
         const existing = sessions[index];
-        const updated: TherapySession = {
+        savedSession = {
           ...existing,
           ...session,
           id: session.id,
+          payment_method: paymentMethod,
           created_at: existing.created_at,
           updated_at: now
         };
-        sessions[index] = updated;
+
+        // If this therapy session has an existing linked sale/invoice
+        if (savedSession.sale_id || savedSession.invoice_id) {
+          const sales = this.get<Sale[]>('sales', []);
+          const sIndex = sales.findIndex((s) => s.id === savedSession.sale_id);
+          const invoices = this.get<Invoice[]>('invoices', []);
+          const invIndex = invoices.findIndex((i) => i.id === savedSession.invoice_id);
+          const saleItems = this.get<SaleItem[]>('sale_items', []);
+
+          if (sIndex >= 0) {
+            sales[sIndex].patient_id = savedSession.patient_id;
+            sales[sIndex].patient_name = patientName;
+            sales[sIndex].sale_date = savedSession.therapy_date;
+            sales[sIndex].subtotal = savedSession.cost;
+            sales[sIndex].total = savedSession.cost;
+            sales[sIndex].payment_status = savedSession.payment_status;
+            sales[sIndex].payment_method = paymentMethod;
+            sales[sIndex].notes = `Sesi Terapi #${savedSession.session_number} (${savedSession.therapy_type})`;
+            this.set('sales', sales);
+          }
+
+          if (invIndex >= 0) {
+            invoices[invIndex].patient_id = savedSession.patient_id;
+            invoices[invIndex].patient_name = patientName;
+            invoices[invIndex].invoice_date = savedSession.therapy_date;
+            invoices[invIndex].subtotal = savedSession.cost;
+            invoices[invIndex].total = savedSession.cost;
+            invoices[invIndex].payment_status = savedSession.payment_status;
+            invoices[invIndex].payment_method = paymentMethod;
+            invoices[invIndex].notes = `Sesi Terapi #${savedSession.session_number} (${savedSession.therapy_type})`;
+            this.set('invoices', invoices);
+          }
+
+          // Update linked sale item
+          const itemIndex = saleItems.findIndex(
+            (it) => it.sale_id === savedSession.sale_id && it.item_type === 'service'
+          );
+          if (itemIndex >= 0) {
+            saleItems[itemIndex].item_name = `Sesi #${savedSession.session_number}: ${savedSession.therapy_type}`;
+            saleItems[itemIndex].price = savedSession.cost;
+            saleItems[itemIndex].subtotal = savedSession.cost;
+            this.set('sale_items', saleItems);
+          }
+
+          // Update payments
+          const payments = this.get<Payment[]>('payments', []);
+          const pIndex = payments.findIndex(
+            (p) =>
+              (savedSession.invoice_id && p.invoice_id === savedSession.invoice_id) ||
+              (savedSession.sale_id && p.sale_id === savedSession.sale_id)
+          );
+
+          if (savedSession.payment_status === 'Lunas' && savedSession.cost > 0) {
+            if (pIndex >= 0) {
+              payments[pIndex].amount = savedSession.cost;
+              payments[pIndex].payment_date = savedSession.therapy_date;
+              payments[pIndex].payment_method = paymentMethod;
+              payments[pIndex].status = 'Lunas';
+              this.set('payments', payments);
+            } else {
+              const newPayment: Payment = {
+                id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                patient_id: savedSession.patient_id,
+                sale_id: savedSession.sale_id,
+                invoice_id: savedSession.invoice_id,
+                payment_date: savedSession.therapy_date,
+                amount: savedSession.cost,
+                payment_method: paymentMethod,
+                status: 'Lunas',
+                notes: `Pembayaran Sesi Terapi #${savedSession.session_number}`,
+                created_at: now
+              };
+              payments.unshift(newPayment);
+              this.set('payments', payments);
+            }
+          } else if (savedSession.payment_status === 'Belum Lunas' && pIndex >= 0) {
+            const remainingPayments = payments.filter(
+              (p) =>
+                !(savedSession.invoice_id && p.invoice_id === savedSession.invoice_id) &&
+                !(savedSession.sale_id && p.sale_id === savedSession.sale_id)
+            );
+            this.set('payments', remainingPayments);
+          }
+        } else if (savedSession.cost > 0) {
+          const { sale, invoice } = this.createSaleWithItems(
+            {
+              patient_id: savedSession.patient_id,
+              patient_name: patientName,
+              sale_date: savedSession.therapy_date,
+              discount: 0,
+              payment_method: paymentMethod,
+              payment_status: savedSession.payment_status,
+              amount_paid: savedSession.payment_status === 'Lunas' ? savedSession.cost : 0,
+              notes: `Sesi Terapi #${savedSession.session_number} (${savedSession.therapy_type})`
+            },
+            [
+              {
+                item_type: 'service',
+                item_name: `Sesi #${savedSession.session_number}: ${savedSession.therapy_type}`,
+                quantity: 1,
+                price: savedSession.cost
+              }
+            ]
+          );
+          savedSession.sale_id = sale.id;
+          savedSession.invoice_id = invoice.id;
+        }
+
+        sessions[index] = savedSession;
         this.set('therapy_sessions', sessions);
-        return updated;
+        return savedSession;
       }
     }
 
-    const newSession: TherapySession = {
+    // New Therapy Session
+    const newSessionId = 'ses_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    let linkedSaleId: string | undefined;
+    let linkedInvoiceId: string | undefined;
+
+    if (session.cost > 0) {
+      const { sale, invoice } = this.createSaleWithItems(
+        {
+          patient_id: session.patient_id,
+          patient_name: patientName,
+          sale_date: session.therapy_date,
+          discount: 0,
+          payment_method: paymentMethod,
+          payment_status: session.payment_status,
+          amount_paid: session.payment_status === 'Lunas' ? session.cost : 0,
+          notes: `Sesi Terapi #${session.session_number} (${session.therapy_type})`
+        },
+        [
+          {
+            item_type: 'service',
+            item_name: `Sesi #${session.session_number}: ${session.therapy_type}`,
+            quantity: 1,
+            price: session.cost
+          }
+        ]
+      );
+      linkedSaleId = sale.id;
+      linkedInvoiceId = invoice.id;
+    }
+
+    savedSession = {
       ...session,
-      id: 'ses_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      id: newSessionId,
+      sale_id: linkedSaleId,
+      invoice_id: linkedInvoiceId,
+      payment_method: paymentMethod,
       created_at: now,
       updated_at: now
     };
-    sessions.unshift(newSession);
+
+    sessions.unshift(savedSession);
     this.set('therapy_sessions', sessions);
-    return newSession;
+    return savedSession;
   }
 
   public deleteTherapySession(sessionId: string): boolean {
-    const sessions = this.getTherapySessions().filter((s) => s.id !== sessionId);
-    this.set('therapy_sessions', sessions);
+    const sessions = this.getTherapySessions();
+    const session = sessions.find((s) => s.id === sessionId);
+
+    if (session) {
+      if (session.sale_id) {
+        const sales = this.get<Sale[]>('sales', []).filter((s) => s.id !== session.sale_id);
+        this.set('sales', sales);
+        const saleItems = this.get<SaleItem[]>('sale_items', []).filter((it) => it.sale_id !== session.sale_id);
+        this.set('sale_items', saleItems);
+      }
+      if (session.invoice_id) {
+        const invoices = this.get<Invoice[]>('invoices', []).filter((inv) => inv.id !== session.invoice_id);
+        this.set('invoices', invoices);
+      }
+      if (session.sale_id || session.invoice_id) {
+        const payments = this.get<Payment[]>('payments', []).filter(
+          (p) =>
+            (!session.invoice_id || p.invoice_id !== session.invoice_id) &&
+            (!session.sale_id || p.sale_id !== session.sale_id)
+        );
+        this.set('payments', payments);
+      }
+    }
+
+    const remainingSessions = sessions.filter((s) => s.id !== sessionId);
+    this.set('therapy_sessions', remainingSessions);
     return true;
   }
 
@@ -1489,6 +1786,23 @@ class StorageEngine {
             this.set('sales', sales);
           }
         }
+
+        // Also sync linked therapy session payment status if any
+        const sessions = this.get<TherapySession[]>('therapy_sessions', []);
+        let sessionUpdated = false;
+        sessions.forEach((ses) => {
+          if (
+            ses.invoice_id === targetInvoice.id ||
+            (targetInvoice.sale_id && ses.sale_id === targetInvoice.sale_id)
+          ) {
+            ses.payment_status = newStatus;
+            ses.updated_at = new Date().toISOString();
+            sessionUpdated = true;
+          }
+        });
+        if (sessionUpdated) {
+          this.set('therapy_sessions', sessions);
+        }
       }
     }
 
@@ -1509,6 +1823,23 @@ class StorageEngine {
           sales[sIndex].payment_status = status;
           this.set('sales', sales);
         }
+      }
+
+      // Also sync linked therapy session payment status if any
+      const sessions = this.get<TherapySession[]>('therapy_sessions', []);
+      let sessionUpdated = false;
+      sessions.forEach((ses) => {
+        if (
+          ses.invoice_id === id ||
+          (invoices[index].sale_id && ses.sale_id === invoices[index].sale_id)
+        ) {
+          ses.payment_status = status;
+          ses.updated_at = new Date().toISOString();
+          sessionUpdated = true;
+        }
+      });
+      if (sessionUpdated) {
+        this.set('therapy_sessions', sessions);
       }
     }
   }

@@ -52,6 +52,9 @@ export interface TherapySession {
   next_plan: string;
   cost: number;
   payment_status: PaymentStatus;
+  payment_method?: PaymentMethod;
+  sale_id?: string;
+  invoice_id?: string;
   created_at: string;
   updated_at: string;
 }

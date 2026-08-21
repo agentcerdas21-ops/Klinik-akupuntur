@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Activity, User, Calendar, DollarSign, Sparkles } from 'lucide-react';
+import { X, Activity, User, Calendar, DollarSign, Sparkles, CheckCircle2, Receipt, CreditCard } from 'lucide-react';
 import { useClinic } from '../../context/DbContext';
-import { TherapySession, PaymentStatus } from '../../types';
+import { TherapySession, PaymentStatus, PaymentMethod } from '../../types';
 
 interface TherapyFormModalProps {
   isOpen: boolean;
@@ -32,6 +32,7 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
   const [nextPlan, setNextPlan] = useState('');
   const [cost, setCost] = useState(150000);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Lunas');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -50,6 +51,7 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
       setNextPlan(sessionToEdit.next_plan || '');
       setCost(sessionToEdit.cost);
       setPaymentStatus(sessionToEdit.payment_status);
+      setPaymentMethod(sessionToEdit.payment_method || 'Cash');
     } else {
       const selectedPid = initialPatientId || (patients.length > 0 ? patients[0].id : '');
       setPatientId(selectedPid);
@@ -71,6 +73,7 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
       setNextPlan('');
       setCost(150000);
       setPaymentStatus('Lunas');
+      setPaymentMethod('Cash');
     }
     setErrors({});
   }, [sessionToEdit, initialPatientId, isOpen, patients, therapySessions]);
@@ -111,7 +114,8 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
       practitioner_notes: practitionerNotes.trim() || undefined,
       next_plan: nextPlan.trim() || undefined,
       cost: Number(cost),
-      payment_status: paymentStatus
+      payment_status: paymentStatus,
+      payment_method: paymentMethod
     };
 
     let result: TherapySession;
@@ -141,7 +145,7 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
                 {sessionToEdit ? 'Edit Rekam Sesi Terapi' : 'Catat Sesi Terapi Akupunktur'}
               </h3>
               <p className="text-xs text-slate-400">
-                Praktisi: <span className="text-emerald-400 font-semibold">Yogi Pangestu</span>
+                Praktisi: <span className="text-emerald-400 font-semibold">Yogi Pangestu</span> • Terintegrasi ke Kasir &amp; Faktur
               </p>
             </div>
           </div>
@@ -151,6 +155,19 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Integration Notification Banner */}
+        <div className="px-6 py-2.5 bg-emerald-50/90 border-b border-emerald-100 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-emerald-950">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              Biaya sesi ini <strong>otomatis tercatat ke Penjualan (POS)</strong> &amp; terbit <strong>Faktur / Kwitansi</strong>.
+            </span>
+          </div>
+          <span className="shrink-0 px-2 py-0.5 bg-emerald-200/80 text-emerald-900 font-bold rounded-md text-[10px] uppercase font-mono tracking-wider">
+            Otomatis
+          </span>
         </div>
 
         {/* Form Body */}
@@ -324,8 +341,8 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
             </div>
           </div>
 
-          {/* Cost & Payment Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+          {/* Cost & Payment Status & Method */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-100">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Biaya Sesi Terapi (Rp)
@@ -367,6 +384,20 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
                   Belum Lunas
                 </button>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Metode Pembayaran</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+                className="w-full px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="Cash">Tunai (Cash)</option>
+                <option value="Transfer">Transfer Bank</option>
+                <option value="QRIS">QRIS</option>
+                <option value="Debit">Kartu Debit</option>
+              </select>
             </div>
           </div>
 

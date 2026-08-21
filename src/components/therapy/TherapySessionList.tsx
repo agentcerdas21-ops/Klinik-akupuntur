@@ -258,8 +258,15 @@ export const TherapySessionList: React.FC<TherapySessionListProps> = ({
                       </td>
 
                       {/* Cost */}
-                      <td className="py-3.5 px-4 text-right font-mono font-bold text-slate-900">
-                        {formatIDR(session.cost)}
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="font-mono font-bold text-slate-900 block">
+                          {formatIDR(session.cost)}
+                        </span>
+                        {session.payment_method && (
+                          <span className="text-[10px] text-slate-400 font-medium block">
+                            {session.payment_method}
+                          </span>
+                        )}
                       </td>
 
                       {/* Payment Status */}
@@ -272,6 +279,9 @@ export const TherapySessionList: React.FC<TherapySessionListProps> = ({
                           }`}
                         >
                           {session.payment_status}
+                        </span>
+                        <span className="block text-[9px] text-teal-600 font-semibold font-mono mt-0.5">
+                          ✓ Sync POS
                         </span>
                       </td>
 
