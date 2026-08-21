@@ -260,10 +260,11 @@ export const ServicesView: React.FC = () => {
                 <input
                   type="number"
                   min={0}
-                  step={5000}
+                  step="any"
                   required
-                  value={price}
-                  onChange={(e) => setPrice(Number(e.target.value))}
+                  value={price === 0 ? '' : price}
+                  onChange={(e) => setPrice(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="0"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

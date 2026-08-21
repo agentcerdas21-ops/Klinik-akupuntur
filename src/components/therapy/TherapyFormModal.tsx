@@ -333,9 +333,10 @@ export const TherapyFormModal: React.FC<TherapyFormModalProps> = ({
               <input
                 type="number"
                 min={0}
-                step={5000}
-                value={cost}
-                onChange={(e) => setCost(Number(e.target.value))}
+                step="any"
+                value={cost === 0 ? '' : cost}
+                onChange={(e) => setCost(e.target.value === '' ? 0 : Number(e.target.value))}
+                placeholder="0"
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
               />
             </div>

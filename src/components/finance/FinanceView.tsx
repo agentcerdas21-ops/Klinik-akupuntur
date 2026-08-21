@@ -454,10 +454,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <input
                   type="number"
                   min={1}
-                  step={5000}
+                  step="any"
                   required
-                  value={expenseAmount}
-                  onChange={(e) => setExpenseAmount(Number(e.target.value))}
+                  value={expenseAmount === 0 ? '' : expenseAmount}
+                  onChange={(e) => setExpenseAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="0"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-rose-500"
                 />
               </div>
@@ -559,10 +560,11 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                 <input
                   type="number"
                   min={1}
-                  step={5000}
+                  step="any"
                   required
-                  value={incomeAmount}
-                  onChange={(e) => setIncomeAmount(Number(e.target.value))}
+                  value={incomeAmount === 0 ? '' : incomeAmount}
+                  onChange={(e) => setIncomeAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="0"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                 />
               </div>

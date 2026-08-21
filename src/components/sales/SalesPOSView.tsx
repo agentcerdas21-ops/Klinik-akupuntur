@@ -763,12 +763,13 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                   <input
                     type="number"
                     min={0}
-                    step={5000}
-                    value={discount}
+                    step="any"
+                    value={discount === 0 ? '' : discount}
                     onChange={(e) => {
-                      setDiscount(Number(e.target.value));
+                      setDiscount(e.target.value === '' ? 0 : Number(e.target.value));
                       setDiscountPercent(null);
                     }}
+                    placeholder="0"
                     className="w-28 px-2 py-1 bg-white border border-slate-300 rounded-lg text-right font-mono font-semibold focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
@@ -862,9 +863,10 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
                 <input
                   type="number"
                   min={0}
-                  step={5000}
-                  value={amountPaid}
-                  onChange={(e) => setAmountPaid(Number(e.target.value))}
+                  step="any"
+                  value={amountPaid === 0 ? '' : amountPaid}
+                  onChange={(e) => setAmountPaid(e.target.value === '' ? 0 : Number(e.target.value))}
+                  placeholder="0"
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                 />
 

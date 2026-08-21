@@ -727,9 +727,10 @@ export const HerbalProductsView: React.FC = () => {
                   <input
                     type="number"
                     min={0}
-                    step={1000}
-                    value={buyPrice}
-                    onChange={(e) => setBuyPrice(Number(e.target.value))}
+                    step="any"
+                    value={buyPrice === 0 ? '' : buyPrice}
+                    onChange={(e) => setBuyPrice(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
@@ -738,10 +739,11 @@ export const HerbalProductsView: React.FC = () => {
                   <input
                     type="number"
                     min={0}
-                    step={1000}
+                    step="any"
                     required
-                    value={sellingPrice}
-                    onChange={(e) => setSellingPrice(Number(e.target.value))}
+                    value={sellingPrice === 0 ? '' : sellingPrice}
+                    onChange={(e) => setSellingPrice(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="0"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
