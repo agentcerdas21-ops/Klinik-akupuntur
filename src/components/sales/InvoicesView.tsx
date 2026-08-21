@@ -37,6 +37,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   // Quick Pay Modal
   const [payModalInvoice, setPayModalInvoice] = useState<Invoice | null>(null);
+  const [settleDate, setSettleDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [settleAmount, setSettleAmount] = useState(0);
   const [settleMethod, setSettleMethod] = useState<'Transfer Bank' | 'Tunai / Cash' | 'QRIS'>('Transfer Bank');
 
@@ -74,6 +75,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     setPayModalInvoice(inv);
     setSettleAmount(inv.total);
     setSettleMethod('Transfer Bank');
+    setSettleDate(new Date().toISOString().split('T')[0]);
   };
 
   const handleSettleSubmit = (e: React.FormEvent) => {
@@ -85,7 +87,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       patient_id: payModalInvoice.patient_id,
       amount: Number(settleAmount),
       payment_method: settleMethod,
-      payment_date: new Date().toISOString().split('T')[0],
+      payment_date: settleDate || new Date().toISOString().split('T')[0],
       status: 'Lunas',
       notes: `Pelunasan faktur ${payModalInvoice.invoice_number}`
     });
@@ -501,6 +503,17 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             </div>
 
             <form onSubmit={handleSettleSubmit} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Tanggal Pembayaran</label>
+                <input
+                  type="date"
+                  required
+                  value={settleDate}
+                  onChange={(e) => setSettleDate(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Jumlah Pelunasan (Rp)</label>
                 <input

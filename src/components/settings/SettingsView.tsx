@@ -7,7 +7,8 @@ import {
   Upload,
   Trash2,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  LogOut
 } from 'lucide-react';
 import { useClinic } from '../../context/DbContext';
 import { useAuth } from '../../context/AuthContext';
@@ -23,7 +24,7 @@ export const SettingsView: React.FC = () => {
     deleteAllPatients
   } = useClinic();
 
-  const { user, role, isOwner, switchRole } = useAuth();
+  const { user, role, isOwner, switchRole, logout } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form State for Clinic Profile
@@ -126,13 +127,20 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">Ganti Peran:</span>
           <button
             onClick={() => switchRole(isOwner ? 'ADMIN' : 'OWNER')}
             className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all border border-slate-700 cursor-pointer"
           >
             {isOwner ? 'Beralih ke Admin (Staff)' : 'Beralih ke Owner (Yogi)'}
+          </button>
+          <button
+            onClick={() => logout()}
+            className="px-3 py-1.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 rounded-xl text-xs font-bold transition-all border border-rose-800/60 flex items-center gap-1.5 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Keluar (Logout)</span>
           </button>
         </div>
       </div>

@@ -17,11 +17,12 @@ import {
   MessageCircle,
   Tag,
   Check,
-  X
+  X,
+  Calendar
 } from 'lucide-react';
 import { useClinic } from '../../context/DbContext';
 import { PaymentMethod, PaymentStatus, Patient } from '../../types';
-import { formatIDR, getWhatsAppUrl } from '../../lib/exportUtils';
+import { formatIDR, formatDateIndo, getWhatsAppUrl } from '../../lib/exportUtils';
 import { PatientFormModal } from '../patients/PatientFormModal';
 
 interface SalesPOSViewProps {
@@ -56,6 +57,9 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
     createSale
   } = useClinic();
 
+  const [saleDate, setSaleDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
   const [patientId, setPatientId] = useState(initialPatientId || '');
   const [patientSearch, setPatientSearch] = useState('');
   const [isPatientDropdownOpen, setIsPatientDropdownOpen] = useState(false);
@@ -197,7 +201,7 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
       {
         patient_id: patientId || undefined,
         patient_name: selectedPatient?.full_name || 'Umum',
-        sale_date: new Date().toISOString().split('T')[0],
+        sale_date: saleDate || new Date().toISOString().split('T')[0],
         discount,
         payment_method: paymentMethod,
         payment_status: paymentStatus,
@@ -225,6 +229,7 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
       setDiscount(0);
       setDiscountPercent(null);
       setNotes('');
+      setSaleDate(new Date().toISOString().split('T')[0]);
       onSaleComplete(invId);
     }
   };
@@ -236,6 +241,7 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
     setDiscountPercent(null);
     setNotes('');
     setPatientId('');
+    setSaleDate(new Date().toISOString().split('T')[0]);
   };
 
   // Filter Catalog
@@ -502,6 +508,48 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
             onSubmit={handleCheckout}
             className="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm space-y-4"
           >
+            {/* Transaction Date Selector */}
+            <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/80">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Tanggal Transaksi / Penjualan</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setSaleDate(new Date().toISOString().split('T')[0])}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded transition-all cursor-pointer ${
+                      saleDate === new Date().toISOString().split('T')[0]
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    Hari Ini
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const d = new Date();
+                      d.setDate(d.getDate() - 1);
+                      setSaleDate(d.toISOString().split('T')[0]);
+                    }}
+                    className="text-[10px] font-semibold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 px-2 py-0.5 rounded cursor-pointer"
+                  >
+                    Kemarin
+                  </button>
+                </div>
+              </div>
+              <input
+                type="date"
+                required
+                id="sale-date-input"
+                value={saleDate}
+                onChange={(e) => setSaleDate(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 shadow-2xs"
+              />
+            </div>
+
             {/* Searchable Patient Selector */}
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -918,6 +966,10 @@ export const SalesPOSView: React.FC<SalesPOSViewProps> = ({
             </div>
 
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-left text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tanggal:</span>
+                <span className="font-bold text-slate-900">{formatDateIndo(saleDate)}</span>
+              </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Pasien:</span>
                 <span className="font-bold text-slate-900">{selectedPatient?.full_name || 'Umum'}</span>

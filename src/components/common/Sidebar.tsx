@@ -14,7 +14,8 @@ import {
   Award,
   Settings,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  LogOut
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useClinic } from '../../context/DbContext';
@@ -45,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen = false,
   onCloseMobile
 }) => {
-  const { isOwner, role } = useAuth();
+  const { user, isOwner, role, logout } = useAuth();
   const { patients, unpaidInvoices, lowStockProducts } = useClinic();
 
   const handleSelect = onSelectTab || setActiveTab || onNavigate || (() => {});
@@ -165,14 +166,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Practitioner Quick Badge */}
-        <div className="px-4 py-3 mx-3 mt-3 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800/60 flex items-center justify-center font-bold text-xs shrink-0">
-            YP
+        <div className="px-4 py-3 mx-3 mt-3 bg-slate-900/90 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-emerald-950 text-emerald-400 border border-emerald-800/60 flex items-center justify-center font-bold text-xs shrink-0">
+              {user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'YP'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-slate-100 truncate">{user?.name || 'Yogi Pangestu'}</p>
+              <p className="text-[10px] text-emerald-400 font-medium truncate">
+                {role === 'OWNER' ? 'Owner / Praktisi' : 'Staff Admin'}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-slate-100 truncate">Yogi Pangestu</p>
-            <p className="text-[10px] text-slate-400 truncate">Saraf Kejepit & Stroke</p>
-          </div>
+          <button
+            onClick={() => logout()}
+            title="Keluar (Logout)"
+            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Navigation List */}

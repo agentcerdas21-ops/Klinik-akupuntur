@@ -10,6 +10,7 @@ import { QuickActionModal } from './components/dashboard/QuickActionModal';
 import { Patient, TherapySession } from './types';
 
 // Views
+import { LoginView } from './components/auth/LoginView';
 import { ExecutiveDashboard } from './components/dashboard/ExecutiveDashboard';
 import { PatientList } from './components/patients/PatientList';
 import { PatientDetailView } from './components/patients/PatientDetailView';
@@ -26,6 +27,7 @@ import { ReportsView } from './components/reports/ReportsView';
 import { SettingsView } from './components/settings/SettingsView';
 
 const ClinicApp: React.FC = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
@@ -105,6 +107,10 @@ const ClinicApp: React.FC = () => {
     }
     setActiveTab('sales');
   };
+
+  if (!user) {
+    return <LoginView />;
+  }
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-100/75 text-slate-800 antialiased font-sans">

@@ -15,10 +15,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
+    // Check if explicitly logged out
+    const isLoggedOut = localStorage.getItem('acucare_is_logged_out');
+    if (isLoggedOut === 'true') {
+      return null;
+    }
+
     const saved = localStorage.getItem('acucare_active_user');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) return parsed;
       } catch {
         // ignore
       }
@@ -36,8 +43,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       localStorage.setItem('acucare_active_user', JSON.stringify(user));
+      localStorage.removeItem('acucare_is_logged_out');
     } else {
       localStorage.removeItem('acucare_active_user');
+      localStorage.setItem('acucare_is_logged_out', 'true');
     }
   }, [user]);
 
@@ -45,20 +54,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const users = db.getUsers();
     let found = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
     if (!found) {
+      const defaultName = selectedRole === 'OWNER' ? 'Yogi Pangestu' : 'Siti Rahma (Admin)';
       found = {
         id: 'usr_' + Date.now(),
-        name: selectedRole === 'OWNER' ? 'Yogi Pangestu' : 'Admin Staff',
+        name: email.toLowerCase().includes('owner') ? 'Yogi Pangestu' : email.toLowerCase().includes('admin') ? 'Siti Rahma' : defaultName,
         email,
         role: selectedRole,
         created_at: new Date().toISOString()
       };
       db.saveUser(found);
+    } else {
+      // Ensure role is up-to-date with selectedRole
+      found = {
+        ...found,
+        role: selectedRole
+      };
     }
+    localStorage.removeItem('acucare_is_logged_out');
     setUser(found);
     return true;
   };
 
   const logout = () => {
+    localStorage.setItem('acucare_is_logged_out', 'true');
+    localStorage.removeItem('acucare_active_user');
     setUser(null);
   };
 
