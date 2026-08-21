@@ -24,7 +24,12 @@ import { formatIDR, formatDateIndo } from '../../lib/exportUtils';
 
 interface ExecutiveDashboardProps {
   onNavigateTab: (tab: string) => void;
-  onOpenQuickAction: (actionType?: string) => void;
+  onOpenQuickAction?: (actionType?: string) => void;
+  onOpenPatientModal?: () => void;
+  onOpenTherapyModal?: () => void;
+  onOpenSaleModal?: () => void;
+  onOpenInvoices?: () => void;
+  onOpenExpenseModal?: () => void;
   onSelectPatient: (patientId: string) => void;
   onSelectInvoice: (invoiceId: string) => void;
 }
@@ -32,6 +37,11 @@ interface ExecutiveDashboardProps {
 export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
   onNavigateTab,
   onOpenQuickAction,
+  onOpenPatientModal,
+  onOpenTherapyModal,
+  onOpenSaleModal,
+  onOpenInvoices,
+  onOpenExpenseModal,
   onSelectPatient,
   onSelectInvoice
 }) => {
@@ -79,28 +89,41 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
         {/* Quick Action Trigger Buttons */}
         <div className="flex flex-wrap items-center gap-2.5 pt-2 lg:pt-0">
           <button
-            onClick={() => onOpenQuickAction('new_patient')}
+            onClick={() => {
+              if (onOpenPatientModal) onOpenPatientModal();
+              else if (onOpenQuickAction) onOpenQuickAction('new_patient');
+              else onNavigateTab('patients');
+            }}
             id="dash-add-patient-btn"
-            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-950/40 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Pasien Baru</span>
+            <span>Pasien Baru</span>
           </button>
           <button
-            onClick={() => onOpenQuickAction('new_therapy')}
+            onClick={() => {
+              if (onOpenTherapyModal) onOpenTherapyModal();
+              else if (onOpenQuickAction) onOpenQuickAction('new_therapy');
+              else onNavigateTab('therapy');
+            }}
             id="dash-add-therapy-btn"
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
           >
             <Activity className="w-4 h-4 text-emerald-400" />
-            <span>+ Sesi Terapi</span>
+            <span>Sesi Terapi</span>
           </button>
           <button
-            onClick={() => onOpenQuickAction('new_sale')}
+            onClick={() => {
+              if (onOpenInvoices) onOpenInvoices();
+              else if (onOpenSaleModal) onOpenSaleModal();
+              else if (onOpenQuickAction) onOpenQuickAction('new_sale');
+              else onNavigateTab('sales');
+            }}
             id="dash-add-sale-btn"
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 rounded-xl text-xs font-bold border border-slate-700 transition-all cursor-pointer"
           >
             <ShoppingBag className="w-4 h-4 text-blue-400" />
-            <span>+ Kasir / Faktur</span>
+            <span>Kasir / Faktur</span>
           </button>
         </div>
       </div>

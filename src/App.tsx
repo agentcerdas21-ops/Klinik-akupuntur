@@ -137,12 +137,36 @@ const ClinicApp: React.FC = () => {
             {/* VIEW ROUTING */}
             {activeTab === 'dashboard' && (
               <ExecutiveDashboard
-                onNavigate={handleNavigate}
+                onNavigateTab={handleNavigate}
                 onSelectPatient={handleSelectPatient}
+                onSelectInvoice={handleSelectInvoice}
                 onOpenPatientModal={handleOpenAddPatient}
                 onOpenTherapyModal={() => handleOpenAddTherapy()}
                 onOpenSaleModal={() => handleNavigate('sales')}
-                onOpenExpenseModal={() => handleNavigate('finance')}
+                onOpenInvoices={() => handleNavigate('invoices')}
+                onOpenExpenseModal={() => {
+                  setFinanceInitialTab('expenses');
+                  setFinanceAutoOpenModal('expense');
+                  handleNavigate('finance');
+                }}
+                onOpenQuickAction={(actionType) => {
+                  if (actionType === 'new_patient') handleOpenAddPatient();
+                  else if (actionType === 'new_therapy') handleOpenAddTherapy();
+                  else if (actionType === 'new_sale') handleNavigate('sales');
+                  else if (actionType === 'cashier_invoice') handleNavigate('invoices');
+                  else if (actionType === 'herbal_products') handleNavigate('herbal');
+                  else if (actionType === 'new_expense') {
+                    setFinanceInitialTab('expenses');
+                    setFinanceAutoOpenModal('expense');
+                    handleNavigate('finance');
+                  } else if (actionType === 'new_income') {
+                    setFinanceInitialTab('income');
+                    setFinanceAutoOpenModal('income');
+                    handleNavigate('finance');
+                  } else {
+                    setIsQuickActionOpen(true);
+                  }
+                }}
               />
             )}
 
