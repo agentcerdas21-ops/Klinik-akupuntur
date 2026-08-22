@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { db } from '../lib/storage';
 import {
+  BackupValidationResult,
   ClinicSettings,
   DatabaseBackupPayload,
   Expense,
@@ -121,6 +122,7 @@ interface DbContextType {
   clearAllData: () => void;
   exportDatabase: () => DatabaseBackupPayload;
   exportFullDatabaseJSON: () => DatabaseBackupPayload;
+  validateBackupFile: (payload: any) => BackupValidationResult;
   importDatabase: (payload: DatabaseBackupPayload) => void;
   importDatabaseJSON: (payload: DatabaseBackupPayload) => void;
 
@@ -563,6 +565,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         clearAllData: deleteAllPatients,
         exportDatabase,
         exportFullDatabaseJSON: exportDatabase,
+        validateBackupFile: (payload: any) => db.validateBackupPayload(payload),
         importDatabase,
         importDatabaseJSON: importDatabase,
         lowStockProducts,

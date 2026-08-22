@@ -8,20 +8,29 @@ import {
   Trash2,
   CheckCircle2,
   AlertTriangle,
-  LogOut
+  LogOut,
+  FileJson,
+  FileSpreadsheet,
+  FileText,
+  Database
 } from 'lucide-react';
 import { useClinic } from '../../context/DbContext';
 import { useAuth } from '../../context/AuthContext';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { RestoreConfirmModal } from './RestoreConfirmModal';
+import { exportDatabaseToExcel, generateBackupReportPDF, formatDateIndo } from '../../lib/exportUtils';
+import { BackupValidationResult } from '../../types';
 
 export const SettingsView: React.FC = () => {
   const {
     settings,
     updateSettings,
     exportDatabase,
+    validateBackupFile,
     importDatabase,
     resetDemoData,
-    deleteAllPatients
+    deleteAllPatients,
+    showToast
   } = useClinic();
 
   const { user, role, isOwner, switchRole, logout } = useAuth();
@@ -38,6 +47,11 @@ export const SettingsView: React.FC = () => {
   const [bankAccountHolder, setBankAccountHolder] = useState(settings.bank_account_holder);
 
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Restore State
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [pendingValidation, setPendingValidation] = useState<BackupValidationResult | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Danger Modals
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
@@ -60,18 +74,50 @@ export const SettingsView: React.FC = () => {
     setTimeout(() => setSaveSuccess(false), 3000);
   };
 
+  // 1. JSON Backup (Main restore source)
   const handleDownloadJSONBackup = () => {
-    const payload = exportDatabase();
-    const jsonStr = JSON.stringify(payload, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ACUCARE_Backup_${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const payload = exportDatabase();
+      const jsonStr = JSON.stringify(payload, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = (payload.created_at || payload.exported_at || new Date().toISOString()).split('T')[0];
+      a.download = `ACUCARE_Backup_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('success', 'Backup JSON Berhasil', 'File cadangan utama berhasil diunduh ke perangkat Anda.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Mengunduh Backup', err.message || 'Terjadi kesalahan saat membuat file JSON.');
+    }
   };
 
+  // 2. Excel Backup (Multi-sheet spreadsheet export)
+  const handleDownloadExcelBackup = () => {
+    try {
+      const payload = exportDatabase();
+      exportDatabaseToExcel(payload);
+      showToast('success', 'Export Excel Berhasil', 'File spreadsheet 11 sheet berhasil diunduh.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Export Excel', err.message || 'Terjadi kesalahan saat membuat file Excel.');
+    }
+  };
+
+  // 3. PDF Backup Report (Print-ready documentation)
+  const handleDownloadPDFBackup = () => {
+    try {
+      const payload = exportDatabase();
+      generateBackupReportPDF(payload);
+      showToast('success', 'Laporan PDF Berhasil', 'Dokumen laporan cadangan berhasil dibuat.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Membuat PDF', err.message || 'Terjadi kesalahan saat menyusun dokumen PDF.');
+    }
+  };
+
+  // Handle Restore File Selection & Validation
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -80,14 +126,38 @@ export const SettingsView: React.FC = () => {
     reader.onload = (event) => {
       try {
         const content = event.target?.result as string;
-        const payload = JSON.parse(content);
-        importDatabase(payload);
-      } catch (err) {
-        alert('Format file JSON cadangan tidak valid.');
+        const parsed = JSON.parse(content);
+        const validation = validateBackupFile(parsed);
+
+        if (!validation.valid || !validation.payload) {
+          showToast('error', 'File Backup Tidak Valid', validation.message || 'Format file tidak sesuai standar ACUCARE.');
+          return;
+        }
+
+        setPendingValidation(validation);
+        setIsRestoreModalOpen(true);
+      } catch (err: any) {
+        showToast('error', 'File Backup Tidak Valid', 'Format file bukan JSON yang valid atau file rusak.');
       }
     };
     reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleExecuteRestore = () => {
+    if (!pendingValidation || !pendingValidation.payload) return;
+
+    setIsRestoring(true);
+    try {
+      importDatabase(pendingValidation.payload);
+      setIsRestoreModalOpen(false);
+      setPendingValidation(null);
+      showToast('success', 'Database Berhasil Dipulihkan', 'Seluruh data klinis dan keuangan telah dikembalikan seperti semula.');
+    } catch (err: any) {
+      showToast('error', 'Gagal Memulihkan Database', err.message || 'Terjadi kesalahan saat memulihkan data.');
+    } finally {
+      setIsRestoring(false);
+    }
   };
 
   return (
@@ -273,49 +343,156 @@ export const SettingsView: React.FC = () => {
         </div>
       </form>
 
-      {/* Backup, Restore & Data Management */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-4">
-        <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Download className="w-4 h-4 text-blue-600" />
-          <span>Cadangan (Backup) & Pemulihan (Restore) Data</span>
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-            <span className="text-xs font-extrabold text-slate-900 block">
-              Download File Backup Lengkap (.json)
-            </span>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Unduh salinan lengkap seluruh data pasien, rekam medis terapi, produk herbal, transaksi kasir, dan keuangan ke komputer Anda.
+      {/* Cadangan (Backup) & Pemulihan (Restore) Data */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm space-y-6">
+        <div className="border-b border-slate-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+              <Download className="w-4 h-4 text-blue-600" />
+              <span>Cadangan (Backup) & Pemulihan (Restore) Data</span>
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Lindungi dan simpan seluruh rekam medis, riwayat terapi, produk herbal, serta transaksi kasir klinik secara aman.
             </p>
-            <button
-              onClick={handleDownloadJSONBackup}
-              className="mt-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download Backup JSON</span>
-            </button>
+          </div>
+          {settings.last_backup_at && (
+            <span className="text-[11px] text-slate-500 bg-slate-100 px-3 py-1 rounded-full font-medium shrink-0 self-start sm:self-auto">
+              Backup Terakhir: {formatDateIndo(settings.last_backup_at)}
+            </span>
+          )}
+        </div>
+
+        {/* 1. BAGIAN DOWNLOAD BACKUP DENGAN 3 FORMAT */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
+              1. Download Backup Database
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Pilih format sesuai kebutuhan
+            </span>
           </div>
 
-          <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
-            <span className="text-xs font-extrabold text-slate-900 block">
-              Pulihkan Database dari File (.json)
-            </span>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Unggah file backup .json yang telah diunduh sebelumnya untuk mengembalikan seluruh catatan klinis.
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Format JSON */}
+            <div className="p-4.5 bg-blue-50/50 rounded-2xl border border-blue-200/80 flex flex-col justify-between space-y-3 hover:border-blue-300 transition-all shadow-2xs">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                    <FileJson className="w-4 h-4" />
+                  </div>
+                  <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 bg-blue-100 text-blue-800 rounded-md border border-blue-200">
+                    UTAMA RESTORE
+                  </span>
+                </div>
+                <span className="text-xs font-extrabold text-slate-900 block">
+                  Backup JSON
+                </span>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  File cadangan utama seluruh database ACUCARE. Wajib digunakan untuk memulihkan (restore) sistem saat ganti HP, restart, atau cache bersih.
+                </p>
+              </div>
+
+              <button
+                onClick={handleDownloadJSONBackup}
+                className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Download Backup JSON</span>
+              </button>
+            </div>
+
+            {/* Format Excel */}
+            <div className="p-4.5 bg-emerald-50/50 rounded-2xl border border-emerald-200/80 flex flex-col justify-between space-y-3 hover:border-emerald-300 transition-all shadow-2xs">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                    <FileSpreadsheet className="w-4 h-4" />
+                  </div>
+                  <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md border border-emerald-200">
+                    11 MULTI-SHEET
+                  </span>
+                </div>
+                <span className="text-xs font-extrabold text-slate-900 block">
+                  Excel (.xlsx)
+                </span>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Ekspor tabular seluruh database ke file Excel 11 sheet (Pasien, Terapi, Layanan, Herbal, Stok, Penjualan, Detail, Pembayaran, Invoice, Pemasukan, Pengeluaran).
+                </p>
+              </div>
+
+              <button
+                onClick={handleDownloadExcelBackup}
+                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Download Backup Excel</span>
+              </button>
+            </div>
+
+            {/* Format PDF */}
+            <div className="p-4.5 bg-slate-50 rounded-2xl border border-slate-200/90 flex flex-col justify-between space-y-3 hover:border-slate-300 transition-all shadow-2xs">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+                    <FileText className="w-4 h-4" />
+                  </div>
+                  <span className="text-[10px] font-black tracking-wider uppercase px-2 py-0.5 bg-slate-200 text-slate-800 rounded-md">
+                    DOKUMENTASI
+                  </span>
+                </div>
+                <span className="text-xs font-extrabold text-slate-900 block">
+                  Laporan PDF
+                </span>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Dokumentasi resmi laporan cadangan klinis siap cetak berisi ringkasan metrik pasien, rekapitulasi koleksi, neraca finansial, dan pengesahan praktisi.
+                </p>
+              </div>
+
+              <button
+                onClick={handleDownloadPDFBackup}
+                className="w-full px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Download Laporan PDF</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. BAGIAN RESTORE DATABASE DARI JSON */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <span className="text-xs font-extrabold text-slate-900 uppercase tracking-wider block">
+            2. Pemulihan (Restore) Database
+          </span>
+
+          <div className="p-5 bg-slate-50/80 rounded-2xl border-2 border-dashed border-slate-300 hover:border-blue-400 transition-colors flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div className="space-y-1 text-center sm:text-left">
+                <span className="text-xs font-extrabold text-slate-900 block">
+                  Pulihkan Seluruh Catatan dari File Backup (.json)
+                </span>
+                <p className="text-[11px] text-slate-500 max-w-xl leading-relaxed">
+                  Unggah file cadangan JSON ACUCARE. Sistem akan memvalidasi integritas data dan menampilkan pratinjau sebelum melakukan pemulihan.
+                </p>
+              </div>
+            </div>
+
             <input
               type="file"
               ref={fileInputRef}
-              accept=".json"
+              accept=".json,application/json"
               onChange={handleFileImport}
               className="hidden"
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 transition-colors cursor-pointer shrink-0 shadow-md"
             >
-              <Upload className="w-3.5 h-3.5" />
+              <Upload className="w-4 h-4" />
               <span>Pilih File Backup JSON</span>
             </button>
           </div>
@@ -373,6 +550,18 @@ export const SettingsView: React.FC = () => {
         </div>
       </div>
 
+      {/* Restore Confirmation Modal */}
+      <RestoreConfirmModal
+        isOpen={isRestoreModalOpen}
+        onClose={() => {
+          setIsRestoreModalOpen(false);
+          setPendingValidation(null);
+        }}
+        onConfirm={handleExecuteRestore}
+        validationResult={pendingValidation}
+        isRestoring={isRestoring}
+      />
+
       {/* Reset Confirm */}
       <ConfirmDialog
         isOpen={isResetConfirmOpen}
@@ -403,3 +592,4 @@ export const SettingsView: React.FC = () => {
     </div>
   );
 };
+

@@ -1,4 +1,5 @@
 import {
+  BackupValidationResult,
   ClinicSettings,
   DatabaseBackupPayload,
   Expense,
@@ -1944,53 +1945,213 @@ class StorageEngine {
 
   // --- BACKUP & RESTORE ---
   public exportFullDatabase(exportedBy: string = 'Yogi Pangestu (Owner)'): DatabaseBackupPayload {
+    const now = new Date().toISOString();
+    const settings = this.getSettings();
+    const users = this.getUsers().map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      created_at: u.created_at
+    }));
+    const patients = this.getPatients();
+    const therapy_sessions = this.getTherapySessions();
+    const services = this.getServices();
+    const service_categories = this.getServiceCategories();
+    const herbal_products = this.getHerbalProducts();
+    const product_categories = this.getProductCategories();
+    const sales = this.getSales();
+    const sale_items = this.getSaleItems();
+    const payments = this.getPayments();
+    const invoices = this.getInvoices();
+    const expenses = this.getExpenses();
+    const expense_categories = this.getExpenseCategories();
+    const income = this.getIncomes();
+    const stock_adjustments = this.getStockAdjustments();
+
     const backup: DatabaseBackupPayload = {
+      app_name: 'ACUCARE Clinic Management',
+      backup_version: '1.0',
+      app_version: '2.5.0',
       version: '1.0.0',
-      exported_at: new Date().toISOString(),
+      created_at: now,
+      exported_at: now,
       exported_by: exportedBy,
-      settings: this.getSettings(),
-      users: this.getUsers(),
-      patients: this.getPatients(),
-      therapy_sessions: this.getTherapySessions(),
-      services: this.getServices(),
-      service_categories: this.getServiceCategories(),
-      herbal_products: this.getHerbalProducts(),
-      product_categories: this.getProductCategories(),
-      sales: this.getSales(),
-      sale_items: this.getSaleItems(),
-      payments: this.getPayments(),
-      invoices: this.getInvoices(),
-      expenses: this.getExpenses(),
-      expense_categories: this.getExpenseCategories(),
-      income: this.getIncomes(),
-      stock_adjustments: this.getStockAdjustments()
+      total_records: {
+        patients: patients.length,
+        therapy_sessions: therapy_sessions.length,
+        services: services.length,
+        herbal_products: herbal_products.length,
+        sales: sales.length,
+        sale_items: sale_items.length,
+        payments: payments.length,
+        invoices: invoices.length,
+        expenses: expenses.length,
+        income: income.length,
+        stock_adjustments: stock_adjustments.length
+      },
+      settings,
+      users,
+      patients,
+      therapy_sessions,
+      services,
+      service_categories,
+      herbal_products,
+      product_categories,
+      sales,
+      sale_items,
+      payments,
+      invoices,
+      expenses,
+      expense_categories,
+      income,
+      stock_adjustments
     };
 
     // Update last backup timestamp
-    this.updateSettings({ last_backup_at: backup.exported_at });
+    this.updateSettings({ last_backup_at: now });
     return backup;
   }
 
-  public importFullDatabase(payload: DatabaseBackupPayload): boolean {
-    if (!payload || typeof payload !== 'object') {
-      throw new Error('Format file backup tidak valid.');
+  public createEmergencySnapshot(): void {
+    try {
+      const current = this.exportFullDatabase('Sistem Otomatis (Pre-Restore Snapshot)');
+      localStorage.setItem('acucare_db_emergency_snapshot', JSON.stringify(current));
+    } catch (err) {
+      console.warn('Failed to save emergency snapshot:', err);
     }
-    if (payload.settings) this.set('settings', payload.settings);
-    if (Array.isArray(payload.users)) this.set('users', payload.users);
-    if (Array.isArray(payload.patients)) this.set('patients', payload.patients);
-    if (Array.isArray(payload.therapy_sessions)) this.set('therapy_sessions', payload.therapy_sessions);
-    if (Array.isArray(payload.services)) this.set('services', payload.services);
-    if (Array.isArray(payload.service_categories)) this.set('service_categories', payload.service_categories);
-    if (Array.isArray(payload.herbal_products)) this.set('herbal_products', payload.herbal_products);
-    if (Array.isArray(payload.product_categories)) this.set('product_categories', payload.product_categories);
-    if (Array.isArray(payload.sales)) this.set('sales', payload.sales);
-    if (Array.isArray(payload.sale_items)) this.set('sale_items', payload.sale_items);
-    if (Array.isArray(payload.payments)) this.set('payments', payload.payments);
-    if (Array.isArray(payload.invoices)) this.set('invoices', payload.invoices);
-    if (Array.isArray(payload.expenses)) this.set('expenses', payload.expenses);
-    if (Array.isArray(payload.expense_categories)) this.set('expense_categories', payload.expense_categories);
-    if (Array.isArray(payload.income)) this.set('income', payload.income);
-    if (Array.isArray(payload.stock_adjustments)) this.set('stock_adjustments', payload.stock_adjustments);
+  }
+
+  public validateBackupPayload(payload: any): BackupValidationResult {
+    if (!payload || typeof payload !== 'object') {
+      return {
+        valid: false,
+        message: 'File bukan format JSON yang valid.'
+      };
+    }
+
+    // Check application signature or recognizable structure
+    const hasAppName = payload.app_name?.toString().toLowerCase().includes('acucare');
+    const hasSettings = payload.settings && typeof payload.settings === 'object';
+    const hasPatients = Array.isArray(payload.patients);
+    const hasTherapy = Array.isArray(payload.therapy_sessions);
+    const hasProducts = Array.isArray(payload.herbal_products);
+    const hasSales = Array.isArray(payload.sales);
+
+    if (!hasAppName && !hasSettings && !hasPatients && !hasTherapy && !hasProducts && !hasSales) {
+      return {
+        valid: false,
+        message: 'File backup tidak valid. Format file tidak sesuai dengan struktur database ACUCARE.'
+      };
+    }
+
+    const patientsCount = Array.isArray(payload.patients) ? payload.patients.length : 0;
+    const therapyCount = Array.isArray(payload.therapy_sessions) ? payload.therapy_sessions.length : 0;
+    const servicesCount = Array.isArray(payload.services) ? payload.services.length : 0;
+    const productsCount = Array.isArray(payload.herbal_products) ? payload.herbal_products.length : 0;
+    const salesCount = Array.isArray(payload.sales) ? payload.sales.length : 0;
+    const saleItemsCount = Array.isArray(payload.sale_items) ? payload.sale_items.length : 0;
+    const paymentsCount = Array.isArray(payload.payments) ? payload.payments.length : 0;
+    const invoicesCount = Array.isArray(payload.invoices) ? payload.invoices.length : 0;
+    const expensesCount = Array.isArray(payload.expenses) ? payload.expenses.length : 0;
+    const incomeCount = Array.isArray(payload.income) ? payload.income.length : 0;
+    const stockCount = Array.isArray(payload.stock_adjustments) ? payload.stock_adjustments.length : 0;
+
+    const validatedPayload: DatabaseBackupPayload = {
+      app_name: payload.app_name || 'ACUCARE Clinic Management',
+      backup_version: payload.backup_version || payload.version || '1.0',
+      app_version: payload.app_version || '2.5.0',
+      version: payload.version || '1.0.0',
+      created_at: payload.created_at || payload.exported_at || new Date().toISOString(),
+      exported_at: payload.exported_at || payload.created_at || new Date().toISOString(),
+      exported_by: payload.exported_by || 'Yogi Pangestu (Owner)',
+      total_records: {
+        patients: patientsCount,
+        therapy_sessions: therapyCount,
+        services: servicesCount,
+        herbal_products: productsCount,
+        sales: salesCount,
+        sale_items: saleItemsCount,
+        payments: paymentsCount,
+        invoices: invoicesCount,
+        expenses: expensesCount,
+        income: incomeCount,
+        stock_adjustments: stockCount
+      },
+      settings: payload.settings || this.getSettings(),
+      users: Array.isArray(payload.users) ? payload.users : this.getUsers(),
+      patients: Array.isArray(payload.patients) ? payload.patients : [],
+      therapy_sessions: Array.isArray(payload.therapy_sessions) ? payload.therapy_sessions : [],
+      services: Array.isArray(payload.services) ? payload.services : [],
+      service_categories: Array.isArray(payload.service_categories) ? payload.service_categories : [],
+      herbal_products: Array.isArray(payload.herbal_products) ? payload.herbal_products : [],
+      product_categories: Array.isArray(payload.product_categories) ? payload.product_categories : [],
+      sales: Array.isArray(payload.sales) ? payload.sales : [],
+      sale_items: Array.isArray(payload.sale_items) ? payload.sale_items : [],
+      payments: Array.isArray(payload.payments) ? payload.payments : [],
+      invoices: Array.isArray(payload.invoices) ? payload.invoices : [],
+      expenses: Array.isArray(payload.expenses) ? payload.expenses : [],
+      expense_categories: Array.isArray(payload.expense_categories) ? payload.expense_categories : [],
+      income: Array.isArray(payload.income) ? payload.income : [],
+      stock_adjustments: Array.isArray(payload.stock_adjustments) ? payload.stock_adjustments : []
+    };
+
+    return {
+      valid: true,
+      details: {
+        app_name: validatedPayload.app_name || 'ACUCARE Clinic Management',
+        backup_version: validatedPayload.backup_version || '1.0',
+        app_version: validatedPayload.app_version || '2.5.0',
+        created_at: validatedPayload.created_at || validatedPayload.exported_at,
+        exported_by: validatedPayload.exported_by,
+        stats: {
+          patients: patientsCount,
+          therapy_sessions: therapyCount,
+          services: servicesCount,
+          herbal_products: productsCount,
+          sales: salesCount,
+          sale_items: saleItemsCount,
+          payments: paymentsCount,
+          invoices: invoicesCount,
+          expenses: expensesCount,
+          income: incomeCount,
+          stock_adjustments: stockCount
+        }
+      },
+      payload: validatedPayload
+    };
+  }
+
+  public importFullDatabase(payload: DatabaseBackupPayload): boolean {
+    const validation = this.validateBackupPayload(payload);
+    if (!validation.valid || !validation.payload) {
+      throw new Error(validation.message || 'File backup tidak valid.');
+    }
+
+    // Safety Snapshot
+    this.createEmergencySnapshot();
+
+    const clean = validation.payload;
+
+    if (clean.settings) this.set('settings', clean.settings);
+    if (Array.isArray(clean.users)) this.set('users', clean.users);
+    if (Array.isArray(clean.patients)) this.set('patients', clean.patients);
+    if (Array.isArray(clean.therapy_sessions)) this.set('therapy_sessions', clean.therapy_sessions);
+    if (Array.isArray(clean.services)) this.set('services', clean.services);
+    if (Array.isArray(clean.service_categories)) this.set('service_categories', clean.service_categories);
+    if (Array.isArray(clean.herbal_products)) this.set('herbal_products', clean.herbal_products);
+    if (Array.isArray(clean.product_categories)) this.set('product_categories', clean.product_categories);
+    if (Array.isArray(clean.sales)) this.set('sales', clean.sales);
+    if (Array.isArray(clean.sale_items)) this.set('sale_items', clean.sale_items);
+    if (Array.isArray(clean.payments)) this.set('payments', clean.payments);
+    if (Array.isArray(clean.invoices)) this.set('invoices', clean.invoices);
+    if (Array.isArray(clean.expenses)) this.set('expenses', clean.expenses);
+    if (Array.isArray(clean.expense_categories)) this.set('expense_categories', clean.expense_categories);
+    if (Array.isArray(clean.income)) this.set('income', clean.income);
+    if (Array.isArray(clean.stock_adjustments)) this.set('stock_adjustments', clean.stock_adjustments);
+
+    localStorage.setItem(STORAGE_PREFIX + 'initialized', 'true');
+    this.notify(true);
 
     return true;
   }

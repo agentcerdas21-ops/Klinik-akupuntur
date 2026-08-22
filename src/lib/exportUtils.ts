@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { ClinicSettings, Invoice, Patient, Sale, TherapySession } from '../types';
+import { ClinicSettings, DatabaseBackupPayload, Invoice, Patient, Sale, TherapySession } from '../types';
 
 export function formatIDR(amount: number): string {
   return new Intl.NumberFormat('id-ID', {
@@ -49,6 +49,413 @@ export function exportToCSV(data: any[], fileName: string) {
   link.click();
   document.body.removeChild(link);
 }
+
+// ==========================================
+// EXCEL DATABASE BACKUP EXPORT (11 SHEETS)
+// ==========================================
+
+export function exportDatabaseToExcel(payload: DatabaseBackupPayload, customFileName?: string) {
+  const wb = XLSX.utils.book_new();
+  const dateStr = (payload.created_at || payload.exported_at || new Date().toISOString()).split('T')[0];
+
+  // Helper map for fast patient lookup
+  const patientMap = new Map<string, string>();
+  (payload.patients || []).forEach((p) => {
+    patientMap.set(p.id, p.full_name);
+  });
+
+  // 1. Sheet: Pasien
+  const patientsData = (payload.patients || []).map((p, idx) => ({
+    'No': idx + 1,
+    'Kode Pasien': p.patient_code || '-',
+    'Nama Lengkap': p.full_name || '-',
+    'NIK': p.nik || '-',
+    'Tanggal Lahir': p.birth_date || '-',
+    'Jenis Kelamin': p.gender || '-',
+    'No. WhatsApp': p.whatsapp || '-',
+    'No. Telepon / HP': p.phone || '-',
+    'Email': p.email || '-',
+    'Alamat': p.address || '-',
+    'Pekerjaan': p.occupation || '-',
+    'Kontak Darurat': p.emergency_contact || '-',
+    'Keluhan Utama': p.main_complaint || '-',
+    'Keluhan Tambahan': p.additional_complaint || '-',
+    'Riwayat Penyakit': p.medical_history || '-',
+    'Catatan Alergi': p.allergy_notes || '-',
+    'Catatan Penting': p.important_notes || '-',
+    'Status': p.status || 'Aktif',
+    'Terdaftar Sejak': p.created_at ? formatDateIndo(p.created_at) : '-'
+  }));
+  const wsPatients = XLSX.utils.json_to_sheet(patientsData.length > 0 ? patientsData : [{ 'Info': 'Tidak ada data pasien' }]);
+  XLSX.utils.book_append_sheet(wb, wsPatients, 'Pasien');
+
+  // 2. Sheet: Terapi
+  const therapyData = (payload.therapy_sessions || []).map((s, idx) => ({
+    'No': idx + 1,
+    'Tanggal Terapi': s.therapy_date ? formatDateIndo(s.therapy_date) : '-',
+    'Sesi Ke': s.session_number || 1,
+    'ID Pasien': s.patient_id,
+    'Nama Pasien': patientMap.get(s.patient_id) || 'Pasien',
+    'Jenis Terapi': s.therapy_type || 'Akupunktur',
+    'Area / Titik Meridian': s.treatment_area || '-',
+    'Keluhan Sesi Ini': s.complaint || '-',
+    'Kondisi Sebelum': s.condition_before || '-',
+    'Kondisi Sesudah': s.condition_after || '-',
+    'Catatan Praktisi': s.practitioner_notes || '-',
+    'Respons & Rencana Lanjut': s.patient_response || s.next_plan || '-',
+    'Biaya Terapi (Rp)': s.cost || 0,
+    'Status Pembayaran': s.payment_status || 'Lunas',
+    'Metode Pembayaran': s.payment_method || '-'
+  }));
+  const wsTherapy = XLSX.utils.json_to_sheet(therapyData.length > 0 ? therapyData : [{ 'Info': 'Tidak ada riwayat sesi terapi' }]);
+  XLSX.utils.book_append_sheet(wb, wsTherapy, 'Terapi');
+
+  // 3. Sheet: Layanan
+  const servicesData = (payload.services || []).map((sv, idx) => ({
+    'No': idx + 1,
+    'Nama Layanan': sv.name || '-',
+    'Kategori': sv.category || '-',
+    'Durasi (Menit)': sv.duration || 60,
+    'Tarif Layanan (Rp)': sv.price || 0,
+    'Status Aktif': sv.active ? 'Aktif' : 'Nonaktif',
+    'Deskripsi': sv.description || '-'
+  }));
+  const wsServices = XLSX.utils.json_to_sheet(servicesData.length > 0 ? servicesData : [{ 'Info': 'Tidak ada data layanan' }]);
+  XLSX.utils.book_append_sheet(wb, wsServices, 'Layanan');
+
+  // 4. Sheet: Produk Herbal
+  const herbalData = (payload.herbal_products || []).map((h, idx) => ({
+    'No': idx + 1,
+    'Kode SKU': h.sku || '-',
+    'Nama Produk Herbal': h.name || '-',
+    'Kategori': h.category || '-',
+    'Satuan': h.unit || 'Botol',
+    'Harga Modal / Beli (Rp)': h.purchase_price || 0,
+    'Harga Jual (Rp)': h.selling_price || 0,
+    'Stok Saat Ini': h.stock || 0,
+    'Stok Minimum': h.minimum_stock || 5,
+    'Status Aktif': h.active ? 'Aktif' : 'Nonaktif',
+    'Keterangan': h.description || h.notes || '-'
+  }));
+  const wsHerbal = XLSX.utils.json_to_sheet(herbalData.length > 0 ? herbalData : [{ 'Info': 'Tidak ada data produk herbal' }]);
+  XLSX.utils.book_append_sheet(wb, wsHerbal, 'Produk Herbal');
+
+  // 5. Sheet: Stok
+  const stockData = (payload.stock_adjustments || []).map((st, idx) => ({
+    'No': idx + 1,
+    'Tanggal & Waktu': st.created_at ? formatDateIndo(st.created_at) : '-',
+    'Nama Produk': st.product_name || '-',
+    'Tipe Perubahan': st.adjustment_type || 'OUT',
+    'Jumlah Perubahan': st.quantity_change || 0,
+    'Stok Sebelum': st.stock_before ?? '-',
+    'Stok Sesudah': st.stock_after ?? '-',
+    'Alasan Penyesuaian': st.reason || '-',
+    'Catatan': st.notes || '-',
+    'Dicatat Oleh': st.adjusted_by || 'Yogi Pangestu'
+  }));
+  const wsStock = XLSX.utils.json_to_sheet(stockData.length > 0 ? stockData : [{ 'Info': 'Tidak ada riwayat penyesuaian stok' }]);
+  XLSX.utils.book_append_sheet(wb, wsStock, 'Stok');
+
+  // 6. Sheet: Penjualan
+  const salesData = (payload.sales || []).map((sl, idx) => ({
+    'No': idx + 1,
+    'Tanggal Penjualan': sl.sale_date ? formatDateIndo(sl.sale_date) : '-',
+    'No. Faktur / Invoice': sl.invoice_id || `INV-${sl.id.slice(-6).toUpperCase()}`,
+    'ID Pasien': sl.patient_id || '-',
+    'Nama Pasien / Pembeli': sl.patient_name || (sl.patient_id ? patientMap.get(sl.patient_id) : 'Pasien Umum'),
+    'Subtotal (Rp)': sl.subtotal || sl.total || 0,
+    'Diskon (Rp)': sl.discount || 0,
+    'Total Akhir (Rp)': sl.total || 0,
+    'Status Pembayaran': sl.payment_status || 'Lunas',
+    'Metode Pembayaran': sl.payment_method || 'Transfer',
+    'Catatan': sl.notes || '-'
+  }));
+  const wsSales = XLSX.utils.json_to_sheet(salesData.length > 0 ? salesData : [{ 'Info': 'Tidak ada transaksi penjualan' }]);
+  XLSX.utils.book_append_sheet(wb, wsSales, 'Penjualan');
+
+  // 7. Sheet: Detail Penjualan
+  const saleItemsData = (payload.sale_items || []).map((it, idx) => ({
+    'No': idx + 1,
+    'ID Penjualan': it.sale_id,
+    'Tipe Item': it.item_type === 'service' ? 'Layanan Terapi' : 'Produk Herbal',
+    'Nama Layanan / Produk': it.item_name || '-',
+    'Kuantitas (Qty)': it.quantity || 1,
+    'Harga Satuan (Rp)': it.price || 0,
+    'Subtotal (Rp)': it.subtotal || ((it.quantity || 1) * (it.price || 0))
+  }));
+  const wsSaleItems = XLSX.utils.json_to_sheet(saleItemsData.length > 0 ? saleItemsData : [{ 'Info': 'Tidak ada rincian item penjualan' }]);
+  XLSX.utils.book_append_sheet(wb, wsSaleItems, 'Detail Penjualan');
+
+  // 8. Sheet: Pembayaran
+  const paymentsData = (payload.payments || []).map((pm, idx) => ({
+    'No': idx + 1,
+    'Tanggal Bayar': pm.payment_date ? formatDateIndo(pm.payment_date) : '-',
+    'ID Transaksi': pm.id,
+    'ID Pasien': pm.patient_id || '-',
+    'ID Penjualan': pm.sale_id || '-',
+    'Nominal Bayar (Rp)': pm.amount || 0,
+    'Metode Pembayaran': pm.payment_method || 'Transfer',
+    'Status': pm.status || 'Lunas',
+    'Keterangan / Referensi': pm.notes || '-'
+  }));
+  const wsPayments = XLSX.utils.json_to_sheet(paymentsData.length > 0 ? paymentsData : [{ 'Info': 'Tidak ada riwayat pembayaran' }]);
+  XLSX.utils.book_append_sheet(wb, wsPayments, 'Pembayaran');
+
+  // 9. Sheet: Invoice
+  const invoicesData = (payload.invoices || []).map((inv, idx) => ({
+    'No': idx + 1,
+    'Nomor Faktur (Invoice)': inv.invoice_number || `INV-${inv.id.slice(-6).toUpperCase()}`,
+    'Tanggal Terbit': inv.invoice_date ? formatDateIndo(inv.invoice_date) : '-',
+    'ID Pasien': inv.patient_id || '-',
+    'Nama Pasien': inv.patient_name || (inv.patient_id ? patientMap.get(inv.patient_id) : 'Pasien Umum'),
+    'Subtotal (Rp)': inv.subtotal || inv.total || 0,
+    'Diskon (Rp)': inv.discount || 0,
+    'Total Tagihan (Rp)': inv.total || 0,
+    'Status Pembayaran': inv.payment_status || 'Lunas',
+    'Metode Pembayaran': inv.payment_method || '-',
+    'Catatan Faktur': inv.notes || '-'
+  }));
+  const wsInvoices = XLSX.utils.json_to_sheet(invoicesData.length > 0 ? invoicesData : [{ 'Info': 'Tidak ada data faktur/invoice' }]);
+  XLSX.utils.book_append_sheet(wb, wsInvoices, 'Invoice');
+
+  // 10. Sheet: Pemasukan
+  const incomeData = (payload.income || []).map((inc, idx) => ({
+    'No': idx + 1,
+    'Tanggal Pemasukan': inc.income_date ? formatDateIndo(inc.income_date) : '-',
+    'Kategori': inc.category || '-',
+    'Deskripsi / Uraian': inc.description || '-',
+    'Sumber Dana': inc.source || '-',
+    'Nominal (Rp)': inc.amount || 0,
+    'Catatan': inc.notes || '-'
+  }));
+  const wsIncome = XLSX.utils.json_to_sheet(incomeData.length > 0 ? incomeData : [{ 'Info': 'Tidak ada catatan pemasukan tambahan' }]);
+  XLSX.utils.book_append_sheet(wb, wsIncome, 'Pemasukan');
+
+  // 11. Sheet: Pengeluaran
+  const expensesData = (payload.expenses || []).map((exp, idx) => ({
+    'No': idx + 1,
+    'Tanggal Pengeluaran': exp.expense_date ? formatDateIndo(exp.expense_date) : '-',
+    'Kategori Pengeluaran': exp.category || '-',
+    'Deskripsi / Keperluan': exp.description || '-',
+    'Metode Pembayaran': exp.payment_method || 'Transfer',
+    'Nominal Beban (Rp)': exp.amount || 0,
+    'Catatan': exp.notes || '-'
+  }));
+  const wsExpenses = XLSX.utils.json_to_sheet(expensesData.length > 0 ? expensesData : [{ 'Info': 'Tidak ada data pengeluaran' }]);
+  XLSX.utils.book_append_sheet(wb, wsExpenses, 'Pengeluaran');
+
+  const fileName = customFileName || `ACUCARE_Backup_Data_${dateStr}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+}
+
+// ==========================================
+// PDF BACKUP & CLINICAL REPORT (PRINT-READY)
+// ==========================================
+
+export function generateBackupReportPDF(payload: DatabaseBackupPayload) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const settings = payload.settings || {
+    clinic_name: 'ACUCARE',
+    clinic_tagline: 'Klinik Akupunktur Ahli Saraf Kejepit & Stroke',
+    address: 'Ruko Arcadia Residence A-16, Desa Karangsatria, Kecamatan Tambun Utara, Kabupaten Bekasi',
+    owner_name: 'Yogi Pangestu',
+    whatsapp: '081399670676'
+  };
+
+  const primaryNavy = [15, 38, 52];
+  const accentEmerald = [16, 185, 129];
+  const textDark = [30, 41, 59];
+  const textMuted = [100, 116, 139];
+
+  const backupDate = payload.created_at || payload.exported_at || new Date().toISOString();
+
+  // 1. Header Banner
+  doc.setFillColor(primaryNavy[0], primaryNavy[1], primaryNavy[2]);
+  doc.rect(0, 0, 210, 36, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text(settings.clinic_name || 'ACUCARE', 16, 14);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(200, 220, 230);
+  doc.text(settings.clinic_tagline || 'Klinik Akupunktur Ahli Saraf Kejepit & Stroke', 16, 20);
+  doc.text(`Praktisi: ${settings.owner_name} | WA: ${settings.whatsapp}`, 16, 26);
+
+  // Title Right
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(accentEmerald[0], accentEmerald[1], accentEmerald[2]);
+  doc.text('LAPORAN DOKUMENTASI CADANGAN', 194, 16, { align: 'right' });
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(255, 255, 255);
+  doc.text(`Backup: ${formatDateIndo(backupDate)}`, 194, 23, { align: 'right' });
+  doc.setTextColor(148, 163, 184);
+  doc.text(`Versi: ${payload.backup_version || '1.0'} (${payload.app_name || 'ACUCARE'})`, 194, 29, { align: 'right' });
+
+  // 2. Financial & Clinic Metric Calculations
+  const patientsCount = (payload.patients || []).length;
+  const therapyCount = (payload.therapy_sessions || []).length;
+  const salesCount = (payload.sales || []).length;
+  const herbalCount = (payload.herbal_products || []).length;
+  const invoicesCount = (payload.invoices || []).length;
+
+  const totalSalesRevenue = (payload.sales || []).reduce((acc, s) => acc + (s.total || 0), 0);
+  const totalIncome = (payload.income || []).reduce((acc, i) => acc + (i.amount || 0), 0);
+  const totalExpense = (payload.expenses || []).reduce((acc, e) => acc + (e.amount || 0), 0);
+  const totalRevenue = totalSalesRevenue + totalIncome;
+  const netIncome = totalRevenue - totalExpense;
+  const totalStockQty = (payload.herbal_products || []).reduce((acc, h) => acc + (h.stock || 0), 0);
+
+  // Summary Metrics Table
+  const summaryTableRows = [
+    ['Total Pasien Terdaftar', `${patientsCount} Pasien`, 'Total Pemasukan & Penjualan', formatIDR(totalRevenue)],
+    ['Total Sesi Terapi Akupunktur', `${therapyCount} Sesi`, 'Total Beban & Pengeluaran', formatIDR(totalExpense)],
+    ['Total Transaksi Penjualan', `${salesCount} Transaksi`, 'Laba Bersih (Net Income)', formatIDR(netIncome)],
+    ['Varian Produk Herbal', `${herbalCount} Produk (${totalStockQty} Unit Stok)`, 'Faktur / Kwitansi Terbit', `${invoicesCount} Faktur`]
+  ];
+
+  autoTable(doc, {
+    startY: 42,
+    head: [['Metrik Klinis & Inventori', 'Jumlah / Status', 'Metrik Finansial & Kasir', 'Nominal']],
+    body: summaryTableRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [15, 38, 52],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8.5
+    },
+    styles: {
+      fontSize: 8,
+      cellPadding: 3
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 50 },
+      1: { cellWidth: 45, fontStyle: 'bold' },
+      2: { fontStyle: 'bold', cellWidth: 50 },
+      3: { cellWidth: 45, halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] }
+    }
+  });
+
+  let currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // 3. Rekapitulasi Data Collections Table
+  const collectionsRows = [
+    ['1', 'Master Pasien & Rekam Medis', `${patientsCount} Data`, 'Valid & Terhubung'],
+    ['2', 'Riwayat Sesi Terapi Akupunktur', `${therapyCount} Sesi`, 'Valid & Terhubung'],
+    ['3', 'Master Layanan & Tarif Tindakan', `${(payload.services || []).length} Layanan`, 'Valid'],
+    ['4', 'Master Produk Herbal & Stok', `${herbalCount} Produk (${totalStockQty} unit)`, 'Valid'],
+    ['5', 'Transaksi Kasir Penjualan (POS)', `${salesCount} Transaksi`, 'Valid'],
+    ['6', 'Rincian Item Penjualan (Sale Items)', `${(payload.sale_items || []).length} Item`, 'Valid'],
+    ['7', 'Faktur / Kwitansi Tagihan (Invoices)', `${invoicesCount} Faktur`, 'Valid'],
+    ['8', 'Pencatatan Pembayaran (Payments)', `${(payload.payments || []).length} Rekam`, 'Valid'],
+    ['9', 'Pencatatan Pemasukan Kas', `${(payload.income || []).length} Rekam`, 'Valid'],
+    ['10', 'Pencatatan Pengeluaran & Beban', `${(payload.expenses || []).length} Rekam`, 'Valid'],
+    ['11', 'Riwayat Log Penyesuaian Stok', `${(payload.stock_adjustments || []).length} Log`, 'Valid']
+  ];
+
+  doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Rekapitulasi Struktur Koleksi Database:', 16, currentY);
+
+  autoTable(doc, {
+    startY: currentY + 2,
+    head: [['No', 'Nama Koleksi Database', 'Jumlah Record Data', 'Status Integritas']],
+    body: collectionsRows,
+    theme: 'striped',
+    headStyles: {
+      fillColor: [30, 41, 59],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8
+    },
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 90, fontStyle: 'bold' },
+      2: { cellWidth: 50, halign: 'center' },
+      3: { cellWidth: 40, halign: 'center', textColor: [5, 150, 105], fontStyle: 'bold' }
+    }
+  });
+
+  currentY = (doc as any).lastAutoTable.finalY + 6;
+
+  // 4. Sample Recent Patients Table
+  if (currentY < 230 && (payload.patients || []).length > 0) {
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Daftar Pasien Terdaftar (Sampel Ringkas):', 16, currentY);
+
+    const patientRows = (payload.patients || []).slice(0, 8).map((p, idx) => [
+      idx + 1,
+      p.patient_code || '-',
+      p.full_name || '-',
+      p.gender || '-',
+      p.whatsapp || p.phone || '-',
+      p.main_complaint ? (p.main_complaint.length > 35 ? p.main_complaint.substring(0, 35) + '...' : p.main_complaint) : '-',
+      p.status || 'Aktif'
+    ]);
+
+    autoTable(doc, {
+      startY: currentY + 2,
+      head: [['No', 'Kode', 'Nama Pasien', 'L/P', 'Kontak WA', 'Keluhan Utama', 'Status']],
+      body: patientRows,
+      theme: 'grid',
+      headStyles: {
+        fillColor: [51, 65, 85],
+        textColor: [255, 255, 255],
+        fontSize: 7.5
+      },
+      styles: {
+        fontSize: 7,
+        cellPadding: 2
+      },
+      columnStyles: {
+        0: { cellWidth: 8, halign: 'center' },
+        1: { cellWidth: 22, fontStyle: 'bold' },
+        2: { cellWidth: 38 },
+        3: { cellWidth: 18, halign: 'center' },
+        4: { cellWidth: 28 },
+        5: { cellWidth: 'auto' },
+        6: { cellWidth: 16, halign: 'center' }
+      }
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Signature section
+  if (currentY < 255) {
+    doc.setTextColor(textDark[0], textDark[1], textDark[2]);
+    doc.setFontSize(8);
+    doc.text(`Bekasi, ${formatDateIndo(backupDate)}`, 145, currentY + 4);
+    doc.text('Penanggung Jawab Database & Praktisi,', 145, currentY + 8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(settings.owner_name, 145, currentY + 22);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
+    doc.text('Klinik ACUCARE', 145, currentY + 26);
+  }
+
+  const cleanDate = backupDate.split('T')[0];
+  doc.save(`ACUCARE_Laporan_Backup_${cleanDate}.pdf`);
+}
+
 
 export async function parseImportFile(file: File): Promise<any[]> {
   return new Promise((resolve, reject) => {

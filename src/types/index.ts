@@ -234,9 +234,26 @@ export interface ClinicSettings {
 }
 
 export interface DatabaseBackupPayload {
-  version: string;
+  app_name?: string;
+  backup_version?: string;
+  app_version?: string;
+  version?: string;
+  created_at?: string;
   exported_at: string;
   exported_by: string;
+  total_records?: {
+    patients: number;
+    therapy_sessions: number;
+    services: number;
+    herbal_products: number;
+    sales: number;
+    sale_items: number;
+    payments: number;
+    invoices: number;
+    expenses: number;
+    income: number;
+    stock_adjustments?: number;
+  };
   settings: ClinicSettings;
   users: User[];
   patients: Patient[];
@@ -253,4 +270,30 @@ export interface DatabaseBackupPayload {
   expense_categories: ExpenseCategory[];
   income: Income[];
   stock_adjustments?: StockAdjustment[];
+}
+
+export interface BackupValidationResult {
+  valid: boolean;
+  message?: string;
+  details?: {
+    app_name: string;
+    backup_version: string;
+    app_version: string;
+    created_at: string;
+    exported_by: string;
+    stats: {
+      patients: number;
+      therapy_sessions: number;
+      services: number;
+      herbal_products: number;
+      sales: number;
+      sale_items: number;
+      payments: number;
+      invoices: number;
+      expenses: number;
+      income: number;
+      stock_adjustments: number;
+    };
+  };
+  payload?: DatabaseBackupPayload;
 }
