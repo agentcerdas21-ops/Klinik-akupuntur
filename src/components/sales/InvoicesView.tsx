@@ -22,12 +22,14 @@ interface InvoicesViewProps {
   selectedInvoiceId?: string | null;
   onClearSelectedInvoice?: () => void;
   onOpenNewSale: () => void;
+  onViewPatient?: (patientId: string) => void;
 }
 
 export const InvoicesView: React.FC<InvoicesViewProps> = ({
   selectedInvoiceId,
   onClearSelectedInvoice,
-  onOpenNewSale
+  onOpenNewSale,
+  onViewPatient
 }) => {
   const { invoices, patients, settings, addPayment, updateInvoiceStatus } = useClinic();
 
@@ -239,9 +241,40 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <span className="font-semibold text-slate-900">
-                        {inv.patient_name || 'Pasien Umum'}
-                      </span>
+                      {(() => {
+                        const pat = patients.find(
+                          (p) =>
+                            p.id === inv.patient_id ||
+                            (p.full_name && p.full_name.trim().toLowerCase() === inv.patient_name?.trim().toLowerCase())
+                        );
+                        return (
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-900">
+                                {pat ? pat.full_name : inv.patient_name || 'Pasien Umum'}
+                              </span>
+                              {pat && onViewPatient && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onViewPatient(pat.id);
+                                  }}
+                                  className="text-[10px] bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-mono font-bold px-1.5 py-0.5 rounded-md border border-emerald-200 transition-colors"
+                                  title="Buka Rekam Pasien"
+                                >
+                                  {pat.patient_code}
+                                </button>
+                              )}
+                            </div>
+                            {pat?.phone && (
+                              <span className="text-[11px] text-slate-500 font-mono block">
+                                {pat.phone}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-600">
@@ -385,29 +418,75 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               </div>
 
               {/* Patient & Billing Info */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-50/60 p-4 rounded-2xl border border-slate-200/70">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    DITAGIHKAN KEPADA:
-                  </span>
-                  <p className="text-sm font-black text-slate-900">{activeInvoice.patient_name || 'Pasien Umum'}</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    METODE & STATUS:
-                  </span>
-                  <p className="text-xs font-bold text-slate-800">{activeInvoice.payment_method || 'Transfer Bank'}</p>
-                  <span
-                    className={`inline-block text-[10px] font-extrabold px-2 py-0.5 rounded-full mt-1 ${
-                      activeInvoice.payment_status === 'Lunas'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-amber-100 text-amber-800'
-                    }`}
-                  >
-                    STATUS: {activeInvoice.payment_status}
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const linkedPatient = patients.find(
+                  (p) =>
+                    p.id === activeInvoice.patient_id ||
+                    (p.full_name && p.full_name.trim().toLowerCase() === activeInvoice.patient_name?.trim().toLowerCase())
+                );
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        DITAGIHKAN KEPADA:
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-black text-slate-900">
+                          {linkedPatient ? linkedPatient.full_name : activeInvoice.patient_name || 'Pasien Umum'}
+                        </p>
+                        {linkedPatient && (
+                          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            {linkedPatient.patient_code}
+                          </span>
+                        )}
+                      </div>
+                      {linkedPatient && (
+                        <div className="mt-1 space-y-0.5 text-xs text-slate-600">
+                          {linkedPatient.phone && (
+                            <p className="flex items-center gap-1.5">
+                              <Phone className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="font-mono">{linkedPatient.phone}</span>
+                            </p>
+                          )}
+                          {linkedPatient.address && (
+                            <p className="text-[11px] text-slate-500 line-clamp-1">{linkedPatient.address}</p>
+                          )}
+                          {onViewPatient && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onViewPatient(linkedPatient.id);
+                                setActiveInvoice(null);
+                              }}
+                              className="mt-2 text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 underline underline-offset-2"
+                            >
+                              Buka Rekam & Riwayat Pasien →
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="sm:text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                        METODE & STATUS:
+                      </span>
+                      <p className="text-xs font-bold text-slate-800">{activeInvoice.payment_method || 'Transfer Bank'}</p>
+                      <span
+                        className={`inline-block text-[10px] font-extrabold px-2.5 py-0.5 rounded-full mt-1.5 ${
+                          activeInvoice.payment_status === 'Lunas'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : activeInvoice.payment_status === 'DP'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        STATUS: {activeInvoice.payment_status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Itemized Table */}
               <div className="border border-slate-200 rounded-2xl overflow-hidden">

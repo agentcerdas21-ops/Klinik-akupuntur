@@ -186,6 +186,7 @@ export interface Invoice {
   payment_status: PaymentStatus;
   payment_method?: PaymentMethod;
   notes?: string;
+  items?: Array<SaleItem & { unit_price?: number }>;
   created_at: string;
 }
 

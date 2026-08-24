@@ -698,6 +698,7 @@ class StorageEngine {
 
   constructor() {
     this.initDefaultsIfEmpty();
+    this.syncPatientInvoices();
     this.syncOrphanTherapySessions();
     this.initCrossTabSync();
   }
@@ -882,6 +883,7 @@ class StorageEngine {
         };
         patients[index] = updated;
         this.set('patients', patients);
+        this.cascadePatientUpdate(updated);
         return updated;
       }
     }
@@ -895,7 +897,47 @@ class StorageEngine {
     };
     patients.unshift(newPatient);
     this.set('patients', patients);
+    this.syncPatientInvoices();
     return newPatient;
+  }
+
+  public cascadePatientUpdate(patient: Patient): void {
+    // 1. Sync Invoices
+    const invoices = this.get<Invoice[]>('invoices', []);
+    let invModified = false;
+    invoices.forEach((inv) => {
+      if (inv.patient_id === patient.id && inv.patient_name !== patient.full_name) {
+        inv.patient_name = patient.full_name;
+        invModified = true;
+      }
+    });
+    if (invModified) this.set('invoices', invoices);
+
+    // 2. Sync Sales
+    const sales = this.get<Sale[]>('sales', []);
+    let saleModified = false;
+    sales.forEach((s) => {
+      if (s.patient_id === patient.id && s.patient_name !== patient.full_name) {
+        s.patient_name = patient.full_name;
+        saleModified = true;
+      }
+    });
+    if (saleModified) this.set('sales', sales);
+
+    // 3. Sync Payments
+    const payments = this.get<Payment[]>('payments', []);
+    let payModified = false;
+    payments.forEach((p) => {
+      if (!p.patient_id) {
+        const linkedInv = invoices.find((i) => i.id === p.invoice_id);
+        const linkedSale = sales.find((s) => s.id === p.sale_id);
+        if (linkedInv?.patient_id === patient.id || linkedSale?.patient_id === patient.id) {
+          p.patient_id = patient.id;
+          payModified = true;
+        }
+      }
+    });
+    if (payModified) this.set('payments', payments);
   }
 
   public deletePatient(patientId: string): boolean {
@@ -949,6 +991,86 @@ class StorageEngine {
     if (sessions.length === 0) return 1;
     const max = Math.max(...sessions.map((s) => s.session_number || 1));
     return max + 1;
+  }
+
+  public syncPatientInvoices(): void {
+    const patients = this.get<Patient[]>('patients', []);
+    const patientMap = new Map<string, Patient>();
+    const nameMap = new Map<string, Patient>();
+
+    patients.forEach((p) => {
+      patientMap.set(p.id, p);
+      if (p.full_name) {
+        nameMap.set(p.full_name.trim().toLowerCase(), p);
+      }
+    });
+
+    let modifiedInvoices = false;
+    let modifiedSales = false;
+    let modifiedPayments = false;
+
+    const invoices = this.get<Invoice[]>('invoices', []);
+    const sales = this.get<Sale[]>('sales', []);
+    const payments = this.get<Payment[]>('payments', []);
+
+    // 1. Sync Invoices with Patients
+    invoices.forEach((inv) => {
+      if (inv.patient_id && patientMap.has(inv.patient_id)) {
+        const pat = patientMap.get(inv.patient_id)!;
+        if (inv.patient_name !== pat.full_name) {
+          inv.patient_name = pat.full_name;
+          modifiedInvoices = true;
+        }
+      } else if (!inv.patient_id && inv.patient_name) {
+        const matched = nameMap.get(inv.patient_name.trim().toLowerCase());
+        if (matched) {
+          inv.patient_id = matched.id;
+          inv.patient_name = matched.full_name;
+          modifiedInvoices = true;
+        }
+      }
+    });
+
+    // 2. Sync Sales with Patients
+    sales.forEach((s) => {
+      if (s.patient_id && patientMap.has(s.patient_id)) {
+        const pat = patientMap.get(s.patient_id)!;
+        if (s.patient_name !== pat.full_name) {
+          s.patient_name = pat.full_name;
+          modifiedSales = true;
+        }
+      } else if (!s.patient_id && s.patient_name) {
+        const matched = nameMap.get(s.patient_name.trim().toLowerCase());
+        if (matched) {
+          s.patient_id = matched.id;
+          s.patient_name = matched.full_name;
+          modifiedSales = true;
+        }
+      }
+    });
+
+    // 3. Sync Payments
+    payments.forEach((p) => {
+      if (!p.patient_id) {
+        if (p.invoice_id) {
+          const inv = invoices.find((i) => i.id === p.invoice_id);
+          if (inv?.patient_id) {
+            p.patient_id = inv.patient_id;
+            modifiedPayments = true;
+          }
+        } else if (p.sale_id) {
+          const s = sales.find((sale) => sale.id === p.sale_id);
+          if (s?.patient_id) {
+            p.patient_id = s.patient_id;
+            modifiedPayments = true;
+          }
+        }
+      }
+    });
+
+    if (modifiedInvoices) this.set('invoices', invoices);
+    if (modifiedSales) this.set('sales', sales);
+    if (modifiedPayments) this.set('payments', payments);
   }
 
   public syncOrphanTherapySessions(): void {
@@ -1596,6 +1718,26 @@ class StorageEngine {
     const invoiceId = 'inv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const invoiceNumber = this.generateInvoiceNumber();
 
+    // Resolve patient details for 100% synchronization
+    const patients = this.getPatients();
+    let resolvedPatientId = saleData.patient_id;
+    let resolvedPatientName = saleData.patient_name;
+
+    if (resolvedPatientId) {
+      const pat = patients.find((p) => p.id === resolvedPatientId);
+      if (pat) {
+        resolvedPatientName = pat.full_name;
+      }
+    } else if (resolvedPatientName && resolvedPatientName.trim() !== '' && resolvedPatientName.trim().toLowerCase() !== 'pasien umum') {
+      const match = patients.find(
+        (p) => p.full_name.trim().toLowerCase() === resolvedPatientName!.trim().toLowerCase()
+      );
+      if (match) {
+        resolvedPatientId = match.id;
+        resolvedPatientName = match.full_name;
+      }
+    }
+
     // Calculate subtotal
     let subtotal = 0;
     const newSaleItems: SaleItem[] = items.map((item, idx) => {
@@ -1608,7 +1750,7 @@ class StorageEngine {
           item.product_id,
           -item.quantity,
           'Penjualan Kasir',
-          `Faktur ${invoiceNumber} - ${saleData.patient_name || 'Pasien Umum'}`
+          `Faktur ${invoiceNumber} - ${resolvedPatientName || 'Pasien Umum'}`
         );
       }
 
@@ -1650,8 +1792,8 @@ class StorageEngine {
     const newSale: Sale = {
       id: saleId,
       invoice_id: invoiceId,
-      patient_id: saleData.patient_id,
-      patient_name: saleData.patient_name,
+      patient_id: resolvedPatientId,
+      patient_name: resolvedPatientName || 'Pasien Umum',
       sale_date: saleData.sale_date,
       subtotal,
       discount: saleData.discount || 0,
@@ -1667,8 +1809,8 @@ class StorageEngine {
     const newInvoice: Invoice = {
       id: invoiceId,
       invoice_number: invoiceNumber,
-      patient_id: saleData.patient_id,
-      patient_name: saleData.patient_name,
+      patient_id: resolvedPatientId,
+      patient_name: resolvedPatientName || 'Pasien Umum',
       sale_id: saleId,
       invoice_date: saleData.sale_date,
       subtotal,
@@ -1698,7 +1840,7 @@ class StorageEngine {
     if (paidAmount > 0) {
       newPayment = {
         id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
-        patient_id: saleData.patient_id,
+        patient_id: resolvedPatientId,
         sale_id: saleId,
         invoice_id: invoiceId,
         payment_date: saleData.sale_date,
@@ -1719,12 +1861,60 @@ class StorageEngine {
   // --- INVOICES ---
   public getInvoices(patientId?: string): Invoice[] {
     const invoices = this.get<Invoice[]>('invoices', DEFAULT_INVOICES);
+    const saleItems = this.getSaleItems();
+    const patients = this.getPatients();
+    const patientMap = new Map<string, Patient>();
+    const nameMap = new Map<string, Patient>();
+
+    patients.forEach((p) => {
+      patientMap.set(p.id, p);
+      if (p.full_name) {
+        nameMap.set(p.full_name.trim().toLowerCase(), p);
+      }
+    });
+
+    const enriched = invoices.map((inv) => {
+      let patId = inv.patient_id;
+      let patName = inv.patient_name;
+
+      if (patId && patientMap.has(patId)) {
+        patName = patientMap.get(patId)!.full_name;
+      } else if (!patId && patName) {
+        const found = nameMap.get(patName.trim().toLowerCase());
+        if (found) {
+          patId = found.id;
+          patName = found.full_name;
+        }
+      }
+
+      const linkedItems = saleItems
+        .filter((item) => item.sale_id === inv.sale_id)
+        .map((it) => ({
+          ...it,
+          unit_price: it.price
+        }));
+
+      return {
+        ...inv,
+        patient_id: patId,
+        patient_name: patName || 'Pasien Umum',
+        items: linkedItems.length > 0 ? linkedItems : (inv.items || [])
+      };
+    });
+
     if (patientId) {
-      return invoices
-        .filter((i) => i.patient_id === patientId)
+      const currentPatient = patientMap.get(patientId);
+      return enriched
+        .filter((i) => {
+          if (i.patient_id === patientId) return true;
+          if (currentPatient && i.patient_name && i.patient_name.trim().toLowerCase() === currentPatient.full_name.trim().toLowerCase()) {
+            return true;
+          }
+          return false;
+        })
         .sort((a, b) => new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime());
     }
-    return invoices.sort((a, b) => new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime());
+    return enriched.sort((a, b) => new Date(b.invoice_date).getTime() - new Date(a.invoice_date).getTime());
   }
 
   public getInvoiceById(id: string): Invoice | undefined {
@@ -2151,6 +2341,8 @@ class StorageEngine {
     if (Array.isArray(clean.stock_adjustments)) this.set('stock_adjustments', clean.stock_adjustments);
 
     localStorage.setItem(STORAGE_PREFIX + 'initialized', 'true');
+    this.syncPatientInvoices();
+    this.syncOrphanTherapySessions();
     this.notify(true);
 
     return true;

@@ -232,6 +232,10 @@ const ClinicApp: React.FC = () => {
                 selectedInvoiceId={selectedInvoiceId}
                 onClearSelectedInvoice={() => setSelectedInvoiceId(null)}
                 onOpenNewSale={() => setActiveTab('sales')}
+                onViewPatient={(patId) => {
+                  setSelectedPatientId(patId);
+                  setActiveTab('patients');
+                }}
               />
             )}
 

@@ -20,7 +20,7 @@ import {
 import { useClinic } from '../../context/DbContext';
 import { useAuth } from '../../context/AuthContext';
 import { Patient, TherapySession } from '../../types';
-import { formatIDR, formatDateIndo, generateTherapyResumePDF } from '../../lib/exportUtils';
+import { formatIDR, formatDateIndo, generateTherapyResumePDF, generateInvoicePDF } from '../../lib/exportUtils';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
 interface PatientDetailViewProps {
@@ -530,15 +530,28 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                           <p className="text-[11px] text-slate-500">{formatDateIndo(inv.invoice_date)}</p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs font-bold text-slate-900 font-mono">{formatIDR(inv.total)}</p>
-                        <span
-                          className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            inv.payment_status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                          }`}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-slate-900 font-mono">{formatIDR(inv.total)}</p>
+                          <span
+                            className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              inv.payment_status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {inv.payment_status}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            generateInvoicePDF(inv, patient, settings);
+                          }}
+                          className="p-2 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                          title="Download PDF Faktur"
                         >
-                          {inv.payment_status}
-                        </span>
+                          <Download className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   ))}
