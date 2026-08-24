@@ -610,32 +610,57 @@ export function generateInvoicePDF(
   doc.text(`Konfirmasi WA: ${settings.whatsapp}`, 20, finalY + 32);
 
   // Totals on Right
-  const totalsX = 135;
+  const totalsX = 120;
   const valuesX = 194;
 
+  const totalPaid = invoice.total_paid || 0;
+  const outstanding = invoice.outstanding !== undefined ? invoice.outstanding : Math.max(0, invoice.total - totalPaid);
+
+  let currentTotalsY = finalY + 6;
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(textMuted[0], textMuted[1], textMuted[2]);
-  doc.text('Subtotal:', totalsX, finalY + 7);
-  doc.text(formatIDR(invoice.subtotal || invoice.total), valuesX, finalY + 7, { align: 'right' });
+  doc.text('Subtotal:', totalsX, currentTotalsY);
+  doc.text(formatIDR(invoice.subtotal || invoice.total), valuesX, currentTotalsY, { align: 'right' });
 
   if (invoice.discount > 0) {
-    doc.text('Diskon:', totalsX, finalY + 14);
-    doc.text(`- ${formatIDR(invoice.discount)}`, valuesX, finalY + 14, { align: 'right' });
+    currentTotalsY += 5.5;
+    doc.text('Diskon:', totalsX, currentTotalsY);
+    doc.text(`- ${formatIDR(invoice.discount)}`, valuesX, currentTotalsY, { align: 'right' });
   }
 
-  // Grand Total Line
-  doc.setDrawColor(226, 232, 240);
-  doc.line(totalsX, finalY + 18, valuesX, finalY + 18);
-
+  // Total Tagihan Line
+  currentTotalsY += 6;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
+  doc.setFontSize(10);
   doc.setTextColor(primaryNavy[0], primaryNavy[1], primaryNavy[2]);
-  doc.text('TOTAL TAGIHAN:', totalsX, finalY + 26);
-  doc.text(formatIDR(invoice.total), valuesX, finalY + 26, { align: 'right' });
+  doc.text('TOTAL TAGIHAN:', totalsX, currentTotalsY);
+  doc.text(formatIDR(invoice.total), valuesX, currentTotalsY, { align: 'right' });
 
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(invoice.payment_status === 'Lunas' ? 16 : 220, invoice.payment_status === 'Lunas' ? 185 : 38, invoice.payment_status === 'Lunas' ? 129 : 38);
-  doc.text(`[ STATUS: ${invoice.payment_status.toUpperCase()} ]`, valuesX, finalY + 33, { align: 'right' });
+  if (totalPaid > 0) {
+    currentTotalsY += 5.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(5, 150, 105);
+    doc.text('Total Dibayar (DP/Cicilan):', totalsX, currentTotalsY);
+    doc.text(formatIDR(totalPaid), valuesX, currentTotalsY, { align: 'right' });
+  }
+
+  if (outstanding > 0) {
+    currentTotalsY += 5.5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(220, 38, 38);
+    doc.text('Sisa Tagihan:', totalsX, currentTotalsY);
+    doc.text(formatIDR(outstanding), valuesX, currentTotalsY, { align: 'right' });
+  }
+
+  currentTotalsY += 6;
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  const isLunas = invoice.payment_status === 'Lunas';
+  const isDP = invoice.payment_status === 'DP';
+  doc.setTextColor(isLunas ? 16 : isDP ? 217 : 220, isLunas ? 185 : isDP ? 119 : 38, isLunas ? 129 : 6);
+  doc.text(`[ STATUS: ${invoice.payment_status.toUpperCase()} ]`, valuesX, currentTotalsY, { align: 'right' });
 
   // Signature and Footer
   const signY = finalY + 46;

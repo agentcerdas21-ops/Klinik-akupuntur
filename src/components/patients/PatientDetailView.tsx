@@ -533,9 +533,18 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <p className="text-xs font-bold text-slate-900 font-mono">{formatIDR(inv.total)}</p>
+                          {(inv.outstanding !== undefined ? inv.outstanding : (inv.payment_status === 'Lunas' ? 0 : Math.max(0, inv.total - (inv.total_paid || 0)))) > 0 && (
+                            <p className="text-[10px] text-rose-600 font-mono font-bold">
+                              Sisa: {formatIDR(inv.outstanding !== undefined ? inv.outstanding : Math.max(0, inv.total - (inv.total_paid || 0)))}
+                            </p>
+                          )}
                           <span
                             className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              inv.payment_status === 'Lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              inv.payment_status === 'Lunas'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : inv.payment_status === 'DP'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
                             }`}
                           >
                             {inv.payment_status}

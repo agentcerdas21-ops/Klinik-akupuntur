@@ -145,9 +145,20 @@ export const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({
                     {unpaidInvoices.length} Faktur Belum Lunas / DP
                   </p>
                   <p className="text-[11px] text-rose-700">
-                    Total piutang berjalan:{' '}
+                    Total sisa piutang berjalan:{' '}
                     <strong>
-                      {formatIDR(unpaidInvoices.reduce((acc, i) => acc + (i.total || 0), 0))}
+                      {formatIDR(
+                        unpaidInvoices.reduce(
+                          (acc, i) =>
+                            acc +
+                            (i.outstanding !== undefined
+                              ? i.outstanding
+                              : i.payment_status === 'Lunas'
+                              ? 0
+                              : Math.max(0, (i.total || 0) - (i.total_paid || 0))),
+                          0
+                        )
+                      )}
                     </strong>
                   </p>
                 </div>

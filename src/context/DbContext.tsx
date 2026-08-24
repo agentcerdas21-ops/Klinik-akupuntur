@@ -101,6 +101,8 @@ interface DbContextType {
 
   recordPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Payment;
   addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Payment;
+  updatePayment: (id: string, data: Partial<Payment>) => Payment;
+  deletePayment: (id: string) => void;
   createCompleteSaleTransaction: (
     saleData: any,
     items: any
@@ -410,6 +412,26 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   };
 
+  const updatePayment = (id: string, data: Partial<Payment>): Payment => {
+    try {
+      const pay = db.updatePayment(id, data);
+      showToast('success', 'Pembayaran Diperbarui', `Nominal ${pay.amount.toLocaleString('id-ID')}`);
+      return pay;
+    } catch (err: any) {
+      showToast('error', 'Gagal Memperbarui Pembayaran', err.message);
+      throw err;
+    }
+  };
+
+  const deletePayment = (id: string) => {
+    try {
+      db.deletePayment(id);
+      showToast('success', 'Pembayaran Dihapus');
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus Pembayaran', err.message);
+    }
+  };
+
   const addExpense = (data: Omit<Expense, 'id' | 'created_at'>): Expense => {
     try {
       const exp = db.saveExpense(data);
@@ -552,6 +574,8 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         createCompleteSaleTransaction: createSale,
         recordPayment,
         addPayment: recordPayment,
+        updatePayment,
+        deletePayment,
         updateInvoiceStatus,
         addExpense,
         deleteExpense,

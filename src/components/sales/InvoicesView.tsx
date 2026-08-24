@@ -64,9 +64,10 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   }, [invoices, search, statusFilter]);
 
   const totalInvoiced = filteredInvoices.reduce((acc, i) => acc + (i.total || 0), 0);
-  const totalUnpaid = filteredInvoices
-    .filter((i) => i.payment_status !== 'Lunas')
-    .reduce((acc, i) => acc + (i.total || 0), 0);
+  const totalOutstanding = filteredInvoices.reduce((acc, i) => {
+    const sisa = i.outstanding !== undefined ? i.outstanding : (i.payment_status === 'Lunas' ? 0 : Math.max(0, (i.total || 0) - (i.total_paid || 0)));
+    return acc + sisa;
+  }, 0);
 
   const handleDownloadPDF = (inv: Invoice) => {
     const patient = patients.find((p) => p.id === inv.patient_id);
@@ -75,7 +76,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   const handleOpenSettleModal = (inv: Invoice) => {
     setPayModalInvoice(inv);
-    setSettleAmount(inv.total);
+    const sisa = inv.outstanding !== undefined ? inv.outstanding : Math.max(0, inv.total - (inv.total_paid || 0));
+    setSettleAmount(sisa);
     setSettleMethod('Transfer Bank');
     setSettleDate(new Date().toISOString().split('T')[0]);
   };
@@ -84,22 +86,38 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     e.preventDefault();
     if (!payModalInvoice || settleAmount <= 0) return;
 
-    addPayment({
-      invoice_id: payModalInvoice.id,
-      patient_id: payModalInvoice.patient_id,
-      amount: Number(settleAmount),
-      payment_method: settleMethod,
-      payment_date: settleDate || new Date().toISOString().split('T')[0],
-      status: 'Lunas',
-      notes: `Pelunasan faktur ${payModalInvoice.invoice_number}`
-    });
+    const sisa = payModalInvoice.outstanding !== undefined ? payModalInvoice.outstanding : Math.max(0, payModalInvoice.total - (payModalInvoice.total_paid || 0));
+    if (settleAmount > sisa) {
+      alert(`Jumlah pembayaran melebihi sisa tagihan. Maksimal pembayaran adalah ${formatIDR(sisa)}.`);
+      return;
+    }
 
-    updateInvoiceStatus(payModalInvoice.id, 'Lunas');
-    setPayModalInvoice(null);
+    try {
+      addPayment({
+        invoice_id: payModalInvoice.id,
+        patient_id: payModalInvoice.patient_id,
+        amount: Number(settleAmount),
+        payment_method: settleMethod,
+        payment_date: settleDate || new Date().toISOString().split('T')[0],
+        status: Number(settleAmount) >= sisa ? 'Lunas' : 'DP',
+        notes: `Pelunasan/Cicilan faktur ${payModalInvoice.invoice_number}`
+      });
 
-    // If currently previewing this invoice, update preview status
-    if (activeInvoice?.id === payModalInvoice.id) {
-      setActiveInvoice({ ...activeInvoice, payment_status: 'Lunas' });
+      setPayModalInvoice(null);
+
+      // If currently previewing this invoice, update preview status
+      if (activeInvoice?.id === payModalInvoice.id) {
+        const newPaid = (activeInvoice.total_paid || 0) + Number(settleAmount);
+        const newOutstanding = Math.max(0, activeInvoice.total - newPaid);
+        setActiveInvoice({
+          ...activeInvoice,
+          total_paid: newPaid,
+          outstanding: newOutstanding,
+          payment_status: newPaid >= activeInvoice.total ? 'Lunas' : 'DP'
+        });
+      }
+    } catch (err: any) {
+      alert(err.message || 'Gagal memproses pembayaran');
     }
   };
 
@@ -159,9 +177,9 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
           <p className="text-2xl font-black text-emerald-700 mt-1 font-mono">{formatIDR(totalInvoiced)}</p>
         </div>
         <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Belum Lunas (Piutang)</span>
-          <p className={`text-2xl font-black mt-1 font-mono ${totalUnpaid > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-            {formatIDR(totalUnpaid)}
+          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Belum Lunas (Sisa Tagihan)</span>
+          <p className={`text-2xl font-black mt-1 font-mono ${totalOutstanding > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+            {formatIDR(totalOutstanding)}
           </p>
         </div>
       </div>
@@ -528,7 +546,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
               {/* Totals Breakdown */}
               <div className="flex justify-end">
-                <div className="w-72 space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="w-80 space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                   <div className="flex justify-between text-slate-600">
                     <span>Subtotal:</span>
                     <span className="font-mono font-semibold">{formatIDR(activeInvoice.subtotal || activeInvoice.total)}</span>
@@ -543,6 +561,24 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                     <span>Total Tagihan:</span>
                     <span className="font-mono text-emerald-800">{formatIDR(activeInvoice.total)}</span>
                   </div>
+                  {((activeInvoice.total_paid !== undefined && activeInvoice.total_paid > 0) || activeInvoice.payment_status === 'Lunas') && (
+                    <div className="flex justify-between text-xs font-bold text-emerald-700">
+                      <span>Total Dibayar (Termasuk DP):</span>
+                      <span className="font-mono">{formatIDR(activeInvoice.total_paid !== undefined ? activeInvoice.total_paid : activeInvoice.total)}</span>
+                    </div>
+                  )}
+                  {(activeInvoice.outstanding !== undefined ? activeInvoice.outstanding : (activeInvoice.payment_status === 'Lunas' ? 0 : Math.max(0, activeInvoice.total - (activeInvoice.total_paid || 0)))) > 0 && (
+                    <div className="flex justify-between text-xs font-black text-rose-600 pt-1 border-t border-dashed border-slate-200">
+                      <span>Sisa Tagihan:</span>
+                      <span className="font-mono">
+                        {formatIDR(
+                          activeInvoice.outstanding !== undefined
+                            ? activeInvoice.outstanding
+                            : Math.max(0, activeInvoice.total - (activeInvoice.total_paid || 0))
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

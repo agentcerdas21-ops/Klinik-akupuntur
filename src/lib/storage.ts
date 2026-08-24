@@ -1862,6 +1862,7 @@ class StorageEngine {
   public getInvoices(patientId?: string): Invoice[] {
     const invoices = this.get<Invoice[]>('invoices', DEFAULT_INVOICES);
     const saleItems = this.getSaleItems();
+    const payments = this.get<Payment[]>('payments', DEFAULT_PAYMENTS);
     const patients = this.getPatients();
     const patientMap = new Map<string, Patient>();
     const nameMap = new Map<string, Patient>();
@@ -1894,11 +1895,29 @@ class StorageEngine {
           unit_price: it.price
         }));
 
+      const linkedPayments = payments.filter(
+        (p) => p.invoice_id === inv.id || (inv.sale_id && p.sale_id === inv.sale_id)
+      );
+      const totalPaid = linkedPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+      const outstanding = Math.max(0, inv.total - totalPaid);
+
+      let dynamicStatus: PaymentStatus = inv.payment_status;
+      if (totalPaid >= inv.total && inv.total > 0) {
+        dynamicStatus = 'Lunas';
+      } else if (totalPaid > 0) {
+        dynamicStatus = 'DP';
+      } else if (totalPaid === 0 && (inv.payment_status === 'Lunas' || inv.payment_status === 'DP')) {
+        dynamicStatus = 'Belum Lunas';
+      }
+
       return {
         ...inv,
         patient_id: patId,
         patient_name: patName || 'Pasien Umum',
-        items: linkedItems.length > 0 ? linkedItems : (inv.items || [])
+        items: linkedItems.length > 0 ? linkedItems : (inv.items || []),
+        total_paid: totalPaid,
+        outstanding: outstanding,
+        payment_status: dynamicStatus
       };
     });
 
@@ -1933,71 +1952,163 @@ class StorageEngine {
   }
 
   public recordPayment(payment: Omit<Payment, 'id' | 'created_at'>): Payment {
+    const invoices = this.get<Invoice[]>('invoices', []);
+    const payments = this.get<Payment[]>('payments', DEFAULT_PAYMENTS);
+
+    let targetInvoice: Invoice | undefined;
+    if (payment.invoice_id) {
+      targetInvoice = invoices.find((i) => i.id === payment.invoice_id);
+    }
+    if (!targetInvoice && payment.sale_id) {
+      targetInvoice = invoices.find((i) => i.sale_id === payment.sale_id);
+    }
+
+    // Overpayment validation
+    if (targetInvoice) {
+      const invPayments = payments.filter(
+        (p) =>
+          p.invoice_id === targetInvoice!.id ||
+          (targetInvoice!.sale_id && p.sale_id === targetInvoice!.sale_id)
+      );
+      const currentPaid = invPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+      const outstanding = Math.max(0, targetInvoice.total - currentPaid);
+
+      if (payment.amount > outstanding) {
+        throw new Error(
+          `Jumlah pembayaran melebihi sisa tagihan. Maksimal pembayaran adalah Rp ${outstanding.toLocaleString('id-ID')}.`
+        );
+      }
+    }
+
     const now = new Date().toISOString();
     const newPayment: Payment = {
       ...payment,
       id: 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
       created_at: now
     };
-    const payments = this.getPayments();
+
     payments.unshift(newPayment);
     this.set('payments', payments);
 
-    // Automatically recalculate and sync invoice and sale status
-    if (payment.invoice_id || payment.sale_id) {
-      const invoices = this.get<Invoice[]>('invoices', []);
-      const invIndex = invoices.findIndex(
-        (i) => i.id === payment.invoice_id || (payment.sale_id && i.sale_id === payment.sale_id)
-      );
-
-      if (invIndex >= 0) {
-        const targetInvoice = invoices[invIndex];
-        const invoicePayments = payments.filter(
-          (p) =>
-            p.invoice_id === targetInvoice.id ||
-            (targetInvoice.sale_id && p.sale_id === targetInvoice.sale_id)
-        );
-        const totalPaid = invoicePayments.reduce((acc, p) => acc + (p.amount || 0), 0);
-
-        let newStatus: PaymentStatus = 'Belum Lunas';
-        if (totalPaid >= targetInvoice.total && targetInvoice.total > 0) {
-          newStatus = 'Lunas';
-        } else if (totalPaid > 0) {
-          newStatus = 'DP';
-        }
-
-        invoices[invIndex].payment_status = newStatus;
-        this.set('invoices', invoices);
-
-        if (targetInvoice.sale_id) {
-          const sales = this.get<Sale[]>('sales', []);
-          const sIndex = sales.findIndex((s) => s.id === targetInvoice.sale_id);
-          if (sIndex >= 0) {
-            sales[sIndex].payment_status = newStatus;
-            this.set('sales', sales);
-          }
-        }
-
-        // Also sync linked therapy session payment status if any
-        const sessions = this.get<TherapySession[]>('therapy_sessions', []);
-        let sessionUpdated = false;
-        sessions.forEach((ses) => {
-          if (
-            ses.invoice_id === targetInvoice.id ||
-            (targetInvoice.sale_id && ses.sale_id === targetInvoice.sale_id)
-          ) {
-            ses.payment_status = newStatus;
-            ses.updated_at = new Date().toISOString();
-            sessionUpdated = true;
-          }
-        });
-        if (sessionUpdated) {
-          this.set('therapy_sessions', sessions);
-        }
-      }
+    // Automatically recalculate and sync invoice, sale, and therapy session statuses
+    if (targetInvoice) {
+      this.recalculateInvoiceStatus(targetInvoice.id, targetInvoice.sale_id);
+    } else if (payment.invoice_id || payment.sale_id) {
+      this.recalculateInvoiceStatus(payment.invoice_id, payment.sale_id);
     }
 
     return newPayment;
+  }
+
+  public updatePayment(id: string, updateData: Partial<Payment>): Payment {
+    const payments = this.getPayments();
+    const index = payments.findIndex((p) => p.id === id);
+    if (index === -1) throw new Error('Data pembayaran tidak ditemukan.');
+
+    const currentPay = payments[index];
+    const invoices = this.get<Invoice[]>('invoices', []);
+    const targetInvoice = invoices.find(
+      (i) => i.id === currentPay.invoice_id || (currentPay.sale_id && i.sale_id === currentPay.sale_id)
+    );
+
+    if (targetInvoice && updateData.amount !== undefined) {
+      const otherPayments = payments.filter(
+        (p) =>
+          p.id !== id &&
+          (p.invoice_id === targetInvoice.id || (targetInvoice.sale_id && p.sale_id === targetInvoice.sale_id))
+      );
+      const otherPaid = otherPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+      const maxAllowed = Math.max(0, targetInvoice.total - otherPaid);
+
+      if (updateData.amount > maxAllowed) {
+        throw new Error(
+          `Jumlah pembayaran melebihi sisa tagihan. Maksimal pembayaran adalah Rp ${maxAllowed.toLocaleString('id-ID')}.`
+        );
+      }
+    }
+
+    payments[index] = { ...currentPay, ...updateData };
+    this.set('payments', payments);
+
+    if (targetInvoice) {
+      this.recalculateInvoiceStatus(targetInvoice.id, targetInvoice.sale_id);
+    }
+
+    return payments[index];
+  }
+
+  public deletePayment(id: string): boolean {
+    const payments = this.getPayments();
+    const target = payments.find((p) => p.id === id);
+    if (!target) return false;
+
+    const remaining = payments.filter((p) => p.id !== id);
+    this.set('payments', remaining);
+
+    if (target.invoice_id || target.sale_id) {
+      this.recalculateInvoiceStatus(target.invoice_id, target.sale_id);
+    }
+    return true;
+  }
+
+  public recalculateInvoiceStatus(invoiceId?: string, saleId?: string): void {
+    const invoices = this.get<Invoice[]>('invoices', []);
+    const payments = this.get<Payment[]>('payments', DEFAULT_PAYMENTS);
+    const sales = this.get<Sale[]>('sales', []);
+    const sessions = this.get<TherapySession[]>('therapy_sessions', []);
+
+    let invIndex = -1;
+    if (invoiceId) {
+      invIndex = invoices.findIndex((i) => i.id === invoiceId);
+    }
+    if (invIndex === -1 && saleId) {
+      invIndex = invoices.findIndex((i) => i.sale_id === saleId);
+    }
+
+    if (invIndex >= 0) {
+      const targetInvoice = invoices[invIndex];
+      const invPayments = payments.filter(
+        (p) =>
+          p.invoice_id === targetInvoice.id ||
+          (targetInvoice.sale_id && p.sale_id === targetInvoice.sale_id)
+      );
+      const totalPaid = invPayments.reduce((acc, p) => acc + (p.amount || 0), 0);
+
+      let newStatus: PaymentStatus = 'Belum Lunas';
+      if (totalPaid >= targetInvoice.total && targetInvoice.total > 0) {
+        newStatus = 'Lunas';
+      } else if (totalPaid > 0) {
+        newStatus = 'DP';
+      }
+
+      invoices[invIndex].payment_status = newStatus;
+      invoices[invIndex].total_paid = totalPaid;
+      invoices[invIndex].outstanding = Math.max(0, targetInvoice.total - totalPaid);
+      this.set('invoices', invoices);
+
+      if (targetInvoice.sale_id) {
+        const sIndex = sales.findIndex((s) => s.id === targetInvoice.sale_id);
+        if (sIndex >= 0) {
+          sales[sIndex].payment_status = newStatus;
+          this.set('sales', sales);
+        }
+      }
+
+      let sessionUpdated = false;
+      sessions.forEach((ses) => {
+        if (
+          ses.invoice_id === targetInvoice.id ||
+          (targetInvoice.sale_id && ses.sale_id === targetInvoice.sale_id)
+        ) {
+          ses.payment_status = newStatus;
+          ses.updated_at = new Date().toISOString();
+          sessionUpdated = true;
+        }
+      });
+      if (sessionUpdated) {
+        this.set('therapy_sessions', sessions);
+      }
+    }
   }
 
   public updateInvoiceStatus(id: string, status: PaymentStatus): void {

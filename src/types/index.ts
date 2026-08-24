@@ -183,6 +183,8 @@ export interface Invoice {
   subtotal: number;
   discount: number;
   total: number;
+  total_paid?: number;
+  outstanding?: number;
   payment_status: PaymentStatus;
   payment_method?: PaymentMethod;
   notes?: string;
