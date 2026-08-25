@@ -42,11 +42,12 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({
   onOpenNewSale,
   onSelectInvoice
 }) => {
-  const { patients, therapySessions, invoices, payments, sales, settings, deletePatient, deleteTherapySession } = useClinic();
+  const { patients, therapySessions, invoices, payments, sales, settings, deletePatient, deleteTherapySession, deleteInvoice } = useClinic();
   const { isOwner } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'profile' | 'medical' | 'therapy' | 'payments' | 'invoices' | 'sales'>('therapy');
   const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const [showDeletePatientModal, setShowDeletePatientModal] = useState(false);
 
   const patient = patients.find((p) => p.id === patientId);
@@ -561,6 +562,17 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                         >
                           <Download className="w-4 h-4" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteInvoiceId(inv.id);
+                          }}
+                          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Hapus Faktur"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -664,6 +676,22 @@ export const PatientDetailView: React.FC<PatientDetailViewProps> = ({
         title="Hapus Data Pasien?"
         message={`«Data pasien "${patient.full_name}" akan dihapus secara permanen dan tidak dapat dikembalikan.»`}
         confirmText="Hapus Permanen"
+        isDangerous={true}
+      />
+
+      {/* Delete Invoice Confirm */}
+      <ConfirmDialog
+        isOpen={!!deleteInvoiceId}
+        onClose={() => setDeleteInvoiceId(null)}
+        onConfirm={() => {
+          if (deleteInvoiceId) {
+            deleteInvoice(deleteInvoiceId);
+            setDeleteInvoiceId(null);
+          }
+        }}
+        title="Hapus Faktur Pasien?"
+        message="Faktur ini akan dihapus permanen beserta seluruh transaksi pembayaran/DP terkait, dan stok produk herbal (jika ada) akan dikembalikan secara otomatis."
+        confirmText="Hapus Faktur"
         isDangerous={true}
       />
     </div>

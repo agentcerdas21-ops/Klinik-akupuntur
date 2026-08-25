@@ -103,6 +103,7 @@ interface DbContextType {
   addPayment: (payment: Omit<Payment, 'id' | 'created_at'>) => Payment;
   updatePayment: (id: string, data: Partial<Payment>) => Payment;
   deletePayment: (id: string) => void;
+  deleteInvoice: (id: string) => void;
   createCompleteSaleTransaction: (
     saleData: any,
     items: any
@@ -432,6 +433,18 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   };
 
+  const deleteInvoice = (id: string) => {
+    try {
+      const inv = invoices.find((i) => i.id === id);
+      const invoiceNumber = inv?.invoice_number || id;
+      db.deleteInvoice(id);
+      showToast('success', 'Faktur Berhasil Dihapus', `Faktur ${invoiceNumber} dan seluruh transaksi terkait telah dihapus.`);
+    } catch (err: any) {
+      showToast('error', 'Gagal Menghapus Faktur', err.message);
+      throw err;
+    }
+  };
+
   const addExpense = (data: Omit<Expense, 'id' | 'created_at'>): Expense => {
     try {
       const exp = db.saveExpense(data);
@@ -576,6 +589,7 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         addPayment: recordPayment,
         updatePayment,
         deletePayment,
+        deleteInvoice,
         updateInvoiceStatus,
         addExpense,
         deleteExpense,

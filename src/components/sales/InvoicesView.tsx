@@ -12,11 +12,13 @@ import {
   Building2,
   Phone,
   MessageCircle,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 import { useClinic } from '../../context/DbContext';
 import { Invoice, PaymentStatus } from '../../types';
 import { formatIDR, formatDateIndo, generateInvoicePDF, exportToExcel } from '../../lib/exportUtils';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 
 interface InvoicesViewProps {
   selectedInvoiceId?: string | null;
@@ -31,11 +33,12 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   onOpenNewSale,
   onViewPatient
 }) => {
-  const { invoices, patients, settings, addPayment, updateInvoiceStatus } = useClinic();
+  const { invoices, patients, settings, addPayment, updateInvoiceStatus, deleteInvoice } = useClinic();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [activeInvoice, setActiveInvoice] = useState<Invoice | null>(null);
+  const [deleteTargetInvoice, setDeleteTargetInvoice] = useState<Invoice | null>(null);
 
   // Quick Pay Modal
   const [payModalInvoice, setPayModalInvoice] = useState<Invoice | null>(null);
@@ -118,6 +121,21 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       }
     } catch (err: any) {
       alert(err.message || 'Gagal memproses pembayaran');
+    }
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteTargetInvoice) return;
+    const targetId = deleteTargetInvoice.id;
+    try {
+      deleteInvoice(targetId);
+      if (activeInvoice?.id === targetId) {
+        setActiveInvoice(null);
+        if (onClearSelectedInvoice) onClearSelectedInvoice();
+      }
+      setDeleteTargetInvoice(null);
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus faktur');
     }
   };
 
@@ -342,6 +360,13 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         >
                           <Download className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => setDeleteTargetInvoice(inv)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Hapus Faktur"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -375,6 +400,14 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setDeleteTargetInvoice(activeInvoice)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Hapus Faktur Ini"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus Faktur</span>
+                </button>
                 <button
                   onClick={() => handleDownloadPDF(activeInvoice)}
                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -673,6 +706,18 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* CONFIRM DELETE INVOICE DIALOG */}
+      <ConfirmDialog
+        isOpen={!!deleteTargetInvoice}
+        onClose={() => setDeleteTargetInvoice(null)}
+        onConfirm={handleConfirmDelete}
+        title="Hapus Faktur"
+        message={`Apakah Anda yakin ingin menghapus faktur ${deleteTargetInvoice?.invoice_number || ''}?\n\nFaktur akan dihapus permanen, pembayaran/DP terkait akan dibersihkan agar laporan keuangan tetap akurat, dan stok produk herbal (jika ada) akan dikembalikan ke inventaris.`}
+        confirmText="Hapus Faktur"
+        cancelText="Batal"
+        isDangerous={true}
+      />
     </div>
   );
 };

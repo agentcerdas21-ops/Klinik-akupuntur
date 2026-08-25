@@ -2146,6 +2146,79 @@ class StorageEngine {
     }
   }
 
+  public deleteInvoice(id: string): boolean {
+    const invoices = this.get<Invoice[]>('invoices', DEFAULT_INVOICES);
+    const targetInvoice = invoices.find((i) => i.id === id);
+    if (!targetInvoice) return false;
+
+    // 1. Stock Product Restoration:
+    const saleItems = this.get<SaleItem[]>('sale_items', DEFAULT_SALE_ITEMS);
+    const itemsToRestore: Array<{ product_id?: string; item_type: string; quantity: number }> = [];
+
+    if (targetInvoice.sale_id) {
+      const linked = saleItems.filter((it) => it.sale_id === targetInvoice.sale_id);
+      itemsToRestore.push(...linked);
+    }
+    if (targetInvoice.items && targetInvoice.items.length > 0 && itemsToRestore.length === 0) {
+      itemsToRestore.push(...(targetInvoice.items as any));
+    }
+
+    // Restore herbal product stock (only once per item)
+    itemsToRestore.forEach((item) => {
+      if (item.item_type === 'product' && item.product_id && item.quantity > 0) {
+        this.adjustStock(
+          item.product_id,
+          item.quantity,
+          'Pembatalan Transaksi',
+          `Restorasi stok - Hapus faktur ${targetInvoice.invoice_number}`
+        );
+      }
+    });
+
+    // 2. Remove Sale & SaleItems
+    if (targetInvoice.sale_id) {
+      const sales = this.get<Sale[]>('sales', DEFAULT_SALES).filter(
+        (s) => s.id !== targetInvoice.sale_id && s.invoice_id !== targetInvoice.id
+      );
+      this.set('sales', sales);
+
+      const remainingSaleItems = saleItems.filter((it) => it.sale_id !== targetInvoice.sale_id);
+      this.set('sale_items', remainingSaleItems);
+    }
+
+    // 3. Remove Associated Payments (prevents orphan payments and keeps financial stats strictly synced)
+    const payments = this.get<Payment[]>('payments', DEFAULT_PAYMENTS);
+    const remainingPayments = payments.filter(
+      (p) => p.invoice_id !== targetInvoice.id && (!targetInvoice.sale_id || p.sale_id !== targetInvoice.sale_id)
+    );
+    this.set('payments', remainingPayments);
+
+    // 4. Unlink Therapy Sessions if any was linked
+    const sessions = this.get<TherapySession[]>('therapy_sessions', DEFAULT_THERAPY_SESSIONS);
+    let sessionUpdated = false;
+    sessions.forEach((ses) => {
+      if (
+        ses.invoice_id === targetInvoice.id ||
+        (targetInvoice.sale_id && ses.sale_id === targetInvoice.sale_id)
+      ) {
+        ses.invoice_id = undefined;
+        ses.sale_id = undefined;
+        ses.payment_status = 'Belum Lunas';
+        ses.updated_at = new Date().toISOString();
+        sessionUpdated = true;
+      }
+    });
+    if (sessionUpdated) {
+      this.set('therapy_sessions', sessions);
+    }
+
+    // 5. Remove Invoice
+    const remainingInvoices = invoices.filter((i) => i.id !== id);
+    this.set('invoices', remainingInvoices);
+
+    return true;
+  }
+
   // --- EXPENSES ---
   public getExpenses(): Expense[] {
     return this.get<Expense[]>('expenses', DEFAULT_EXPENSES).sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
