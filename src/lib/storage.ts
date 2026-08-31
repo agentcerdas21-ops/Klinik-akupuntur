@@ -194,13 +194,12 @@ const DEFAULT_HERBAL_PRODUCTS: HerbalProduct[] = [
 ];
 
 const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
-  { id: 'ec_1', name: 'Jarum Akupunktur & Perlengkapan Steril', active: true, created_at: '2026-01-01T08:00:00.000Z' },
-  { id: 'ec_2', name: 'Restok Produk Herbal', active: true, created_at: '2026-01-01T08:00:00.000Z' },
-  { id: 'ec_3', name: 'Sewa & Operasional Ruko Arcadia', active: true, created_at: '2026-01-01T08:00:00.000Z' },
-  { id: 'ec_4', name: 'Listrik, Air & Internet', active: true, created_at: '2026-01-01T08:00:00.000Z' },
-  { id: 'ec_5', name: 'Kebersihan & Higienitas Ruang Terapi', active: true, created_at: '2026-01-01T08:00:00.000Z' },
-  { id: 'ec_6', name: 'Marketing & Banner Promosi', active: true, created_at: '2026-01-01T08:00:00.000Z' },
-  { id: 'ec_7', name: 'Lain-lain', active: true, created_at: '2026-01-01T08:00:00.000Z' }
+  { id: 'ec_1', name: 'Jarum & Medis Steril', active: true, created_at: '2026-01-01T08:00:00.000Z' },
+  { id: 'ec_2', name: 'Sewa Ruko & Kebersihan', active: true, created_at: '2026-01-01T08:00:00.000Z' },
+  { id: 'ec_3', name: 'Listrik & Internet', active: true, created_at: '2026-01-01T08:00:00.000Z' },
+  { id: 'ec_4', name: 'Honor & Asisten', active: true, created_at: '2026-01-01T08:00:00.000Z' },
+  { id: 'ec_5', name: 'Restok Herbal', active: true, created_at: '2026-01-01T08:00:00.000Z' },
+  { id: 'ec_6', name: 'Lainnya', active: true, created_at: '2026-01-01T08:00:00.000Z' }
 ];
 
 const DEFAULT_PATIENTS: Patient[] = [

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   DollarSign,
   TrendingUp,
@@ -6,11 +6,16 @@ import {
   Plus,
   Search,
   Download,
-  Trash2
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  Pencil,
+  X
 } from 'lucide-react';
 import { useClinic } from '../../context/DbContext';
 import { useAuth } from '../../context/AuthContext';
-import { Expense, Income, PaymentMethod } from '../../types';
+import { Expense, ExpenseCategory, Income, PaymentMethod } from '../../types';
 import { formatIDR, formatDateIndo, exportToExcel } from '../../lib/exportUtils';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 
@@ -27,6 +32,9 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 }) => {
   const {
     expenses,
+    expenseCategories,
+    saveExpenseCategory,
+    deleteExpenseCategory,
     income,
     totalRevenue,
     totalExpense,
@@ -55,6 +63,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       if (onClearAutoOpenModal) onClearAutoOpenModal();
     }
   }, [autoOpenModal, onClearAutoOpenModal]);
+
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
@@ -66,11 +75,96 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
   // Expense Form State
   const [expenseTitle, setExpenseTitle] = useState('');
-  const [expenseCategory, setExpenseCategory] = useState('Jarum & Bahan Medis Steril');
+  const [expenseCategory, setExpenseCategory] = useState<string>(
+    expenseCategories[0]?.name || 'Jarum & Medis Steril'
+  );
   const [expenseAmount, setExpenseAmount] = useState(150000);
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [expenseMethod, setExpenseMethod] = useState<PaymentMethod>('Cash');
   const [expenseNotes, setExpenseNotes] = useState('');
+
+  // Category Dropdown Custom State
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [categoryToDelete, setCategoryToDelete] = useState<ExpenseCategory | null>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close category dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsCategoryDropdownOpen(false);
+        setIsAddingCategory(false);
+        setEditingCategoryId(null);
+      }
+    };
+    if (isCategoryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCategoryDropdownOpen]);
+
+  // Keep expenseCategory synchronized with available categories
+  useEffect(() => {
+    if (expenseCategories.length > 0) {
+      if (!expenseCategory) {
+        setExpenseCategory(expenseCategories[0].name);
+      }
+    }
+  }, [expenseCategories, expenseCategory]);
+
+  const handleSaveNewCategory = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) return;
+
+    try {
+      const saved = saveExpenseCategory(trimmed);
+      setExpenseCategory(saved.name);
+      setNewCategoryName('');
+      setIsAddingCategory(false);
+      setIsCategoryDropdownOpen(false);
+    } catch {
+      // Toast is handled in context
+    }
+  };
+
+  const handleSaveEditCategory = (id: string, e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = editingCategoryName.trim();
+    if (!trimmed) return;
+
+    const oldCat = expenseCategories.find((c) => c.id === id);
+    try {
+      const updated = saveExpenseCategory(trimmed, id);
+      if (oldCat && expenseCategory === oldCat.name) {
+        setExpenseCategory(updated.name);
+      }
+      setEditingCategoryId(null);
+      setEditingCategoryName('');
+    } catch {
+      // Toast is handled in context
+    }
+  };
+
+  const handleConfirmDeleteCategory = () => {
+    if (!categoryToDelete) return;
+    const deletedName = categoryToDelete.name;
+    deleteExpenseCategory(categoryToDelete.id);
+    if (expenseCategory === deletedName) {
+      const remaining = expenseCategories.filter((c) => c.id !== categoryToDelete.id);
+      setExpenseCategory(remaining[0]?.name || 'Lainnya');
+    }
+    setCategoryToDelete(null);
+  };
 
   // Income Form State
   const [incomeTitle, setIncomeTitle] = useState('');
@@ -119,6 +213,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
     setIncomeNotes('');
     setShowIncomeModal(false);
   };
+
+  // Available Categories for Table Filter
+  const availableCategoriesList = useMemo(() => {
+    const catSet = new Set<string>();
+    expenseCategories.forEach((c) => {
+      if (c.active !== false && c.name) catSet.add(c.name);
+    });
+    expenses.forEach((e) => {
+      if (e.category) catSet.add(e.category);
+    });
+    return Array.from(catSet);
+  }, [expenseCategories, expenses]);
 
   // Filtered Expenses
   const filteredExpenses = useMemo(() => {
@@ -260,20 +366,35 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           {activeTab === 'expenses' && (
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="relative flex-1 max-w-md w-full">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Cari keterangan pengeluaran atau kategori..."
-                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
-                  />
+                <div className="flex flex-1 items-center gap-2 max-w-xl w-full">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="Cari keterangan pengeluaran atau kategori..."
+                      className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                    />
+                  </div>
+
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-rose-500 cursor-pointer"
+                  >
+                    <option value="ALL">Semua Kategori</option>
+                    {availableCategoriesList.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <button
                   onClick={handleExportExpenses}
-                  className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
                   <Download className="w-3.5 h-3.5 text-rose-600" />
                   <span>Excel Pengeluaran</span>
@@ -421,20 +542,192 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className="relative" ref={categoryDropdownRef}>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Kategori</label>
-                  <select
-                    value={expenseCategory}
-                    onChange={(e) => setExpenseCategory(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCategoryDropdownOpen(!isCategoryDropdownOpen);
+                      setIsAddingCategory(false);
+                      setEditingCategoryId(null);
+                    }}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 flex items-center justify-between focus:outline-hidden focus:ring-2 focus:ring-rose-500 cursor-pointer hover:bg-slate-100/70 transition-colors text-left"
                   >
-                    <option value="Jarum & Bahan Medis Steril">Jarum & Medis Steril</option>
-                    <option value="Sewa Ruko & Operasional">Sewa Ruko & Kebersihan</option>
-                    <option value="Listrik, Air & Internet">Listrik & Internet</option>
-                    <option value="Honor & Asisten">Honor & Asisten</option>
-                    <option value="Restok Obat Herbal">Restok Herbal</option>
-                    <option value="Lainnya">Lainnya</option>
-                  </select>
+                    <span className="truncate">{expenseCategory || 'Pilih Kategori'}</span>
+                    {isCategoryDropdownOpen ? (
+                      <ChevronUp className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-1" />
+                    )}
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isCategoryDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 max-h-64 overflow-y-auto space-y-1">
+                      {/* Category List */}
+                      {expenseCategories
+                        .filter((c) => c.active !== false)
+                        .map((cat) => {
+                          const isSelected = expenseCategory === cat.name;
+                          const isEditingThis = editingCategoryId === cat.id;
+
+                          if (isEditingThis) {
+                            return (
+                              <div
+                                key={cat.id}
+                                className="p-1.5 bg-slate-50 border border-rose-200 rounded-xl space-y-1.5"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={editingCategoryName}
+                                  onChange={(e) => setEditingCategoryName(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveEditCategory(cat.id);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingCategoryId(null);
+                                    }
+                                  }}
+                                  placeholder="Nama kategori..."
+                                  className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                                />
+                                <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingCategoryId(null)}
+                                    className="px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-200 rounded-md cursor-pointer"
+                                  >
+                                    Batal
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSaveEditCategory(cat.id)}
+                                    className="px-2.5 py-1 text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-md cursor-pointer flex items-center gap-1"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    <span>Simpan</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={cat.id}
+                              onClick={() => {
+                                setExpenseCategory(cat.name);
+                                setIsCategoryDropdownOpen(false);
+                              }}
+                              className={`w-full px-2.5 py-1.5 rounded-xl text-xs flex items-center justify-between group transition-colors cursor-pointer ${
+                                isSelected
+                                  ? 'bg-rose-50 text-rose-700 font-bold'
+                                  : 'text-slate-700 hover:bg-slate-50 font-medium'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate pr-2">
+                                {isSelected && <Check className="w-3.5 h-3.5 text-rose-600 shrink-0" />}
+                                <span className="truncate">{cat.name}</span>
+                              </div>
+                              <div
+                                className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingCategoryId(cat.id);
+                                    setEditingCategoryName(cat.name);
+                                    setIsAddingCategory(false);
+                                  }}
+                                  title="Edit Kategori"
+                                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCategoryToDelete(cat)}
+                                  title="Hapus Kategori"
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                      {/* Divider */}
+                      <div className="border-t border-slate-100 my-1"></div>
+
+                      {/* Add Category Section */}
+                      {isAddingCategory ? (
+                        <div
+                          className="p-2 bg-slate-50 border border-rose-200 rounded-xl space-y-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <label className="block text-[11px] font-bold text-slate-700">
+                            Nama Kategori Baru:
+                          </label>
+                          <input
+                            type="text"
+                            autoFocus
+                            value={newCategoryName}
+                            onChange={(e) => setNewCategoryName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveNewCategory();
+                              } else if (e.key === 'Escape') {
+                                setIsAddingCategory(false);
+                              }
+                            }}
+                            placeholder="Contoh: Transportasi"
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
+                          />
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAddingCategory(false);
+                                setNewCategoryName('');
+                              }}
+                              className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:bg-slate-200 rounded-lg cursor-pointer"
+                            >
+                              Batal
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveNewCategory()}
+                              disabled={!newCategoryName.trim()}
+                              className="px-3 py-1 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-lg cursor-pointer flex items-center gap-1 shadow-2xs"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Simpan</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsAddingCategory(true);
+                            setNewCategoryName('');
+                            setEditingCategoryId(null);
+                          }}
+                          className="w-full py-2 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer text-left"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>+ Tambah Kategori</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -623,6 +916,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         title="Hapus Catatan Pemasukan?"
         message="Catatan pemasukan manual ini akan dihapus dari buku kas."
         confirmText="Hapus Pemasukan"
+        isDangerous={true}
+      />
+
+      {/* Delete Category Dialog */}
+      <ConfirmDialog
+        isOpen={!!categoryToDelete}
+        onClose={() => setCategoryToDelete(null)}
+        onConfirm={handleConfirmDeleteCategory}
+        title="Hapus Kategori Pengeluaran?"
+        message={`Kategori "${categoryToDelete?.name}" akan dihapus dari daftar pilihan. Catatan transaksi pengeluaran historis yang sudah ada tetap aman dan tidak akan terhapus.`}
+        confirmText="Hapus Kategori"
         isDangerous={true}
       />
     </div>

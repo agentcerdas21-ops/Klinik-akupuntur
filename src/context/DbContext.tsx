@@ -113,7 +113,7 @@ interface DbContextType {
 
   addExpense: (data: Omit<Expense, 'id' | 'created_at'>) => Expense;
   deleteExpense: (id: string) => void;
-  saveExpenseCategory: (name: string, id?: string) => void;
+  saveExpenseCategory: (name: string, id?: string) => ExpenseCategory;
   deleteExpenseCategory: (id: string) => void;
 
   addIncome: (data: Omit<Income, 'id' | 'created_at'>) => Income;
@@ -465,12 +465,14 @@ export const DbProvider: React.FC<{ children: React.ReactNode }> = ({ children }
     }
   };
 
-  const saveExpenseCategory = (name: string) => {
+  const saveExpenseCategory = (name: string, id?: string): ExpenseCategory => {
     try {
-      db.saveExpenseCategory({ name, active: true });
-      showToast('success', 'Kategori Pengeluaran Ditambahkan', name);
+      const res = db.saveExpenseCategory({ id, name, active: true });
+      showToast('success', id ? 'Kategori Pengeluaran Diperbarui' : 'Kategori Pengeluaran Ditambahkan', name);
+      return res;
     } catch (err: any) {
-      showToast('error', 'Gagal Menambah Kategori', err.message);
+      showToast('error', 'Gagal Menyimpan Kategori', err.message);
+      throw err;
     }
   };
 
